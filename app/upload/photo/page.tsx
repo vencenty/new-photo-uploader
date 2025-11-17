@@ -36,6 +36,26 @@ export default function PhotoPrintPage() {
       url: '/placeholder5.jpg',
       quantity: 1,
     },
+    {
+        id: '5',
+        url: '/placeholder5.jpg',
+        quantity: 1,
+      },
+      {
+        id: '5',
+        url: '/placeholder5.jpg',
+        quantity: 1,
+      },
+      {
+        id: '5',
+        url: '/placeholder5.jpg',
+        quantity: 1,
+      },
+      {
+        id: '5',
+        url: '/placeholder5.jpg',
+        quantity: 1,
+      },
   ]);
 
   const PRICE_PER_PHOTO = 3.5;

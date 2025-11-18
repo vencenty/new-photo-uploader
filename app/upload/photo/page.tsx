@@ -207,8 +207,7 @@ export default function PhotoPrintPage() {
                         <div className="flex-1 relative">
                             <button
                                 onClick={handleAddPhoto}
-                                className="absolute inset-0 bg-white rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center hover:border-orange-500 transition-colors"
-                                style={getPhotoContainerStyle()}
+                                className="absolute inset-0 bg-white  border-2 border-dashed border-gray-300 flex flex-col items-center justify-center hover:border-orange-500 transition-colors"
                             >
                                 <div className="text-4xl text-gray-300 mb-2">+</div>
                                 <div className="text-sm text-gray-400">添加照片</div>
@@ -219,7 +218,7 @@ export default function PhotoPrintPage() {
                         {/* 第一行的前2张照片 */}
                         {photos.slice(0, 2).map((photo) => (
                             <div key={photo.id} className="flex-1 relative">
-                                <div className="bg-white rounded-lg overflow-hidden shadow-sm relative" style={getPhotoContainerStyle()}>
+                                <div className="bg-white overflow-hidden shadow-sm relative" style={getPhotoContainerStyle()}>
                                     <div className="absolute inset-0">
                                         {/* 删除按钮 */}
                                         <button

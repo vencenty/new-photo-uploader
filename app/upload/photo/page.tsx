@@ -14,12 +14,13 @@ type PhotoSize = '5寸' | '6寸' | '7寸';
 interface SizeOption {
     size: PhotoSize;
     label: string;
+    aspectRatio: number;
 }
 
 const PHOTO_SIZES: SizeOption[] = [
-    { size: '5寸', label: '5寸:光面-普通版' },
-    { size: '6寸', label: '6寸:光面-普通版' },
-    { size: '7寸', label: '7寸:光面-普通版' },
+    { size: '5寸', label: '5寸:光面-普通版', aspectRatio: 7/10 },
+    { size: '6寸', label: '6寸:光面-普通版', aspectRatio: 2/3 },
+    { size: '7寸', label: '7寸:光面-普通版', aspectRatio: 5/7 },
 ];
 
 export default function PhotoPrintPage() {

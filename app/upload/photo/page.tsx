@@ -61,6 +61,7 @@ export default function PhotoPrintPage() {
     const getPhotoWarning = (photo: Photo): string | null => {
         // TODO: 在这里添加更多的判断逻辑
         
+        return '我很难受';
         // 1. 检查文件大小 - 小于100KB可能模糊
         if (photo.fileSize < 100 * 1024) {
             return '照片模糊';
@@ -316,7 +317,7 @@ export default function PhotoPrintPage() {
 
                                                             {/* 确认按钮 */}
                                                             <button
-                                                                className="px-4 py-2.5 bg-white text-black rounded-xl text-center text-sm font-medium active:scale-95 transition hover:bg-gray-100"
+                                                                className="px-2 py-1.5 bg-white text-black rounded-xl text-center text-sm font-medium active:scale-95 transition hover:bg-gray-100"
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
                                                                     handleConfirmPhoto(photo.id);

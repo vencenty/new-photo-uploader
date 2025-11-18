@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Image from 'next/image';
 
 interface Photo {
@@ -10,53 +10,8 @@ interface Photo {
 }
 
 export default function PhotoPrintPage() {
-    const [photos, setPhotos] = useState<Photo[]>([
-        {
-            id: '1',
-            url: '/placeholder1.jpg',
-            quantity: 1,
-        },
-        {
-            id: '2',
-            url: '/placeholder2.jpg',
-            quantity: 1,
-        },
-        {
-            id: '3',
-            url: '/placeholder3.jpg',
-            quantity: 1,
-        },
-        {
-            id: '4',
-            url: '/placeholder4.jpg',
-            quantity: 1,
-        },
-        {
-            id: '5',
-            url: '/placeholder5.jpg',
-            quantity: 1,
-        },
-        {
-            id: '6',
-            url: '/placeholder6.jpg',
-            quantity: 1,
-        },
-        {
-            id: '7',
-            url: '/placeholder7.jpg',
-            quantity: 1,
-        },
-        {
-            id: '8',
-            url: '/placeholder8.jpg',
-            quantity: 1,
-        },
-        {
-            id: '9',
-            url: '/placeholder9.jpg',
-            quantity: 1,
-        },
-    ]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [photos, setPhotos] = useState<Photo[]>([] as Photo[]);
 
     const PRICE_PER_PHOTO = 3.5;
     const SHIPPING_FEE = 6;
@@ -87,9 +42,70 @@ export default function PhotoPrintPage() {
     };
 
     const handleAddPhoto = () => {
-        // 这里可以实现图片上传逻辑
-        console.log('添加照片123');
-        
+        // 触发文件选择器
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files;
+        if (!files || files.length === 0) return;
+
+        const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+        const validPhotos: Photo[] = [];
+        const errors: string[] = [];
+
+        // 处理所有选中的文件
+        for (const file of Array.from(files)) {
+            // 检查文件类型
+            if (!file.type.startsWith('image/')) {
+                errors.push(`${file.name} 不是图片文件`);
+                continue;
+            }
+
+            // 检查文件大小
+            if (file.size > MAX_FILE_SIZE) {
+                errors.push(`${file.name} 超过50MB限制`);
+                continue;
+            }
+
+            try {
+                // 创建图片URL
+                const imageUrl = URL.createObjectURL(file);
+                
+                // 预加载图片以确保能正常显示
+                await new Promise<void>((resolve, reject) => {
+                    const img = document.createElement('img');
+                    img.onload = () => resolve();
+                    img.onerror = () => reject(new Error('图片加载失败'));
+                    img.src = imageUrl;
+                });
+
+                // 生成唯一ID（使用时间戳 + 随机数确保唯一性）
+                const newPhoto: Photo = {
+                    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    url: imageUrl,
+                    quantity: 1
+                };
+
+                validPhotos.push(newPhoto);
+            } catch (error) {
+                errors.push(`${file.name} 加载失败`);
+                console.error(`图片加载错误:`, error);
+            }
+        }
+
+        // 批量添加有效的照片到列表
+        if (validPhotos.length > 0) {
+            setPhotos(prevPhotos => [...prevPhotos, ...validPhotos]);
+        }
+
+        // 显示错误信息（如果有）
+        if (errors.length > 0) {
+            alert(`以下文件处理失败:\n${errors.join('\n')}`);
+        }
+
+        // 重置文件输入，以便可以重复选择同一文件
+        event.target.value = '';
     };
 
     const handleSubmitOrder = () => {
@@ -98,7 +114,18 @@ export default function PhotoPrintPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col">
+        <>
+            {/* 隐藏的文件输入元素 */}
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleFileChange}
+                className="hidden"
+            />
+
+            <div className="min-h-screen  flex flex-col">
             {/* 顶部导航栏 */}
             <header className="bg-white border-b sticky top-0 z-10">
                 <div className="flex items-center justify-between px-4 py-3">
@@ -151,8 +178,16 @@ export default function PhotoPrintPage() {
                                 </button>
 
                                 {/* 图片 */}
-                                <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center">
-                                    <span className="text-gray-400 text-xs">照片预览</span>
+                                <div className="w-full h-full">
+                                    <img
+                                        src={photo.url}
+                                        alt="照片"
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                            console.error('图片加载失败:', photo.url);
+                                            e.currentTarget.style.display = 'none';
+                                        }}
+                                    />
                                 </div>
 
                                 {/* 右上角徽章 */}
@@ -208,8 +243,16 @@ export default function PhotoPrintPage() {
                                                 </button>
 
                                                 {/* 图片 */}
-                                                <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center">
-                                                    <span className="text-gray-400 text-xs">照片预览</span>
+                                                <div className="w-full h-full">
+                                                    <img
+                                                        src={photo.url}
+                                                        alt="照片"
+                                                        className="w-full h-full object-cover"
+                                                        onError={(e) => {
+                                                            console.error('图片加载失败:', photo.url);
+                                                            e.currentTarget.style.display = 'none';
+                                                        }}
+                                                    />
                                                 </div>
 
                                                 {/* 右上角徽章 */}
@@ -284,6 +327,7 @@ export default function PhotoPrintPage() {
                     </button>
                 </div>
             </div>
-        </div>
+            </div>
+        </>
     );
 }

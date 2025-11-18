@@ -27,7 +27,6 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <h1>这是最外层root目录 </h1>
         {children}
       </body>
     </html>

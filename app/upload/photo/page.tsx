@@ -201,45 +201,58 @@ export default function PhotoPrintPage() {
 
                 {/* 照片列表区域 */}
                 <div className="flex-1 px-4 py-4 bg-gray-50">
-                    {/* 第一行：添加按钮 + 2张照片 */}
-                    <div className="flex gap-3 mb-4">
-                        {/* 添加照片按钮 - 固定 */}
-                        <div className="flex-1 relative">
-                            <button
-                                onClick={handleAddPhoto}
-                                className="absolute inset-0 bg-white  border-2 border-dashed border-gray-300 flex flex-col items-center justify-center hover:border-orange-500 transition-colors"
-                            >
-                                <div className="text-4xl text-gray-300 mb-2">+</div>
-                                <div className="text-sm text-gray-400">添加照片</div>
-                            </button>
-                            <div style={getPhotoContainerStyle()}></div>
-                        </div>
-
-                        {/* 第一行的前2张照片 */}
-                        {photos.slice(0, 2).map((photo) => (
-                            <div key={photo.id} className="flex-1 relative">
-                                <div className="bg-white overflow-hidden shadow-sm relative" style={getPhotoContainerStyle()}>
-                                    <div className="absolute inset-0">
-                                        {/* 删除按钮 */}
+                    <div className="space-y-4">
+                        {Array.from({ length: Math.ceil((photos.length + 1) / 3) }).map((_, rowIndex) => {
+                            const items = [];
+                            
+                            // 第一行第一个位置：添加按钮
+                            if (rowIndex === 0) {
+                                items.push(
+                                    <div key="add-button" className="flex-1 relative">
                                         <button
-                                            onClick={() => handleRemovePhoto(photo.id)}
-                                            className="absolute top-2 right-2 z-10 w-6 h-6 bg-black bg-opacity-50 rounded-full flex items-center justify-center text-white hover:bg-opacity-70 transition-all"
+                                            onClick={handleAddPhoto}
+                                            className="absolute inset-0 bg-white border-2 border-dashed border-gray-300 flex flex-col items-center justify-center hover:border-orange-500 transition-colors"
                                         >
-                                            ×
+                                            <div className="text-4xl text-gray-300 mb-2">+</div>
+                                            <div className="text-sm text-gray-400">添加照片</div>
                                         </button>
+                                        <div style={getPhotoContainerStyle()}></div>
+                                    </div>
+                                );
+                            }
+                            
+                            // 计算当前行应该显示的照片
+                            const startIndex = rowIndex === 0 ? 0 : (rowIndex * 3 - 1);
+                            const photosInRow = rowIndex === 0 ? 2 : 3;
+                            const rowPhotos = photos.slice(startIndex, startIndex + photosInRow);
+                            
+                            // 添加照片项
+                            rowPhotos.forEach((photo) => {
+                                items.push(
+                                    <div key={photo.id} className="flex-1 relative">
+                                        <div className="bg-white rounded-lg overflow-hidden shadow-sm relative" style={getPhotoContainerStyle()}>
+                                            <div className="absolute inset-0">
+                                                {/* 删除按钮 */}
+                                                <button
+                                                    onClick={() => handleRemovePhoto(photo.id)}
+                                                    className="absolute top-2 right-2 z-10 w-6 h-6 bg-black bg-opacity-50 rounded-full flex items-center justify-center text-white hover:bg-opacity-70 transition-all"
+                                                >
+                                                    ×
+                                                </button>
 
-                                        {/* 图片 */}
-                                        <div className="w-full h-full">
-                                            <img
-                                                src={photo.url}
-                                                alt="照片"
-                                                className="w-full h-full object-cover"
-                                                onError={(e) => {
-                                                    console.error('图片加载失败:', photo.url);
-                                                    e.currentTarget.style.display = 'none';
-                                                }}
-                                            />
-                                            <div className="flex flex-col items-center justify-center absolute inset-0 bg-black/40 rounded-xl">
+                                                {/* 图片 */}
+                                                <div className="w-full h-full">
+                                                    <img
+                                                        src={photo.url}
+                                                        alt="照片"
+                                                        className="w-full h-full object-cover"
+                                                        onError={(e) => {
+                                                            console.error('图片加载失败:', photo.url);
+                                                            e.currentTarget.style.display = 'none';
+                                                        }}
+                                                    />
+
+                                    <div className="flex flex-col items-center justify-center absolute inset-0 bg-black/40 rounded-xl">
                                                 {/* 提示文字 */}
                                                 
                                                     <div className="text-lg font-medium text-red-100 text-lg mb-2">
@@ -260,111 +273,47 @@ export default function PhotoPrintPage() {
 
                                             </div>
 
+                                                </div>
+                                            
+
+                                            </div>
                                         </div>
 
-                                        {/* 右上角徽章 */}
-                                        {/* <div className="absolute top-2 left-2 bg-yellow-400 rounded-full w-6 h-6 flex items-center justify-center"> */}
-                                        {/* <span className="text-xs">👑</span> */}
-                                        {/* </div> */}
-                                    </div>
-                                </div>
-
-                                {/* 数量调整器 */}
-                                <div className="mt-2 flex items-center justify-center gap-3 bg-white rounded-full py-2 shadow-sm">
-                                    <button
-                                        onClick={() => handleQuantityChange(photo.id, -1)}
-                                        className="w-6 h-6 flex items-center justify-center text-gray-600 hover:text-orange-500"
-                                        disabled={photo.quantity <= 1}
-                                    >
-                                        −
-                                    </button>
-                                    <span className="text-base font-medium w-8 text-center text-black">{photo.quantity}</span>
-                                    <button
-                                        onClick={() => handleQuantityChange(photo.id, 1)}
-                                        className="w-6 h-6 flex items-center justify-center text-gray-600 hover:text-orange-500"
-                                    >
-                                        +
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-
-                        {/* 如果第一行不足3个（包含添加按钮），填充空白 */}
-                        {photos.length < 2 && Array.from({ length: 2 - photos.length }).map((_, idx) => (
-                            <div key={`placeholder-first-${idx}`} className="flex-1"></div>
-                        ))}
-                    </div>
-
-                    {/* 后续行：每行3张照片 */}
-                    {photos.length > 2 && (
-                        <div className="space-y-4">
-                            {Array.from({ length: Math.ceil((photos.length - 2) / 3) }).map((_, rowIndex) => {
-                                const startIndex = 2 + rowIndex * 3;
-                                const rowPhotos = photos.slice(startIndex, startIndex + 3);
-
-                                return (
-                                    <div key={`row-${rowIndex}`} className="flex gap-3">
-                                        {rowPhotos.map((photo) => (
-                                            <div key={photo.id} className="flex-1 relative">
-                                                <div className="bg-white rounded-lg overflow-hidden shadow-sm relative" style={getPhotoContainerStyle()}>
-                                                    <div className="absolute inset-0">
-                                                        {/* 删除按钮 */}
-                                                        <button
-                                                            onClick={() => handleRemovePhoto(photo.id)}
-                                                            className="absolute top-2 right-2 z-10 w-6 h-6 bg-black bg-opacity-50 rounded-full flex items-center justify-center text-white hover:bg-opacity-70 transition-all"
-                                                        >
-                                                            ×
-                                                        </button>
-
-                                                        {/* 图片 */}
-                                                        <div className="w-full h-full">
-                                                            <img
-                                                                src={photo.url}
-                                                                alt="照片"
-                                                                className="w-full h-full object-cover"
-                                                                onError={(e) => {
-                                                                    console.error('图片加载失败:', photo.url);
-                                                                    e.currentTarget.style.display = 'none';
-                                                                }}
-                                                            />
-                                                        </div>
-
-                                                        {/* 左上角徽章 */}
-                                                        {/* <div className="absolute top-2 left-2 bg-yellow-400 rounded-full w-6 h-6 flex items-center justify-center">
-                                                            <span className="text-xs">👑</span>
-                                                        </div> */}
-                                                    </div>
-                                                </div>
-
-                                                {/* 数量调整器 */}
-                                                <div className="mt-2 flex items-center justify-center gap-3 bg-white rounded-full py-2 shadow-sm">
-                                                    <button
-                                                        onClick={() => handleQuantityChange(photo.id, -1)}
-                                                        className="w-6 h-6 flex items-center justify-center text-gray-600 hover:text-orange-500"
-                                                        disabled={photo.quantity <= 1}
-                                                    >
-                                                        −
-                                                    </button>
-                                                    <span className="text-base font-medium w-8 text-center text-black">{photo.quantity}</span>
-                                                    <button
-                                                        onClick={() => handleQuantityChange(photo.id, 1)}
-                                                        className="w-6 h-6 flex items-center justify-center text-gray-600 hover:text-orange-500"
-                                                    >
-                                                        +
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-
-                                        {/* 如果该行不足3张，填充空白以保持对齐 */}
-                                        {rowPhotos.length < 3 && Array.from({ length: 3 - rowPhotos.length }).map((_, idx) => (
-                                            <div key={`placeholder-${rowIndex}-${idx}`} className="flex-1"></div>
-                                        ))}
+                                        {/* 数量调整器 */}
+                                        <div className="mt-2 flex items-center justify-center gap-3 bg-white rounded-full py-2 shadow-sm">
+                                            <button
+                                                onClick={() => handleQuantityChange(photo.id, -1)}
+                                                className="w-6 h-6 flex items-center justify-center text-gray-600 hover:text-orange-500"
+                                                disabled={photo.quantity <= 1}
+                                            >
+                                                −
+                                            </button>
+                                            <span className="text-base font-medium w-8 text-center text-black">{photo.quantity}</span>
+                                            <button
+                                                onClick={() => handleQuantityChange(photo.id, 1)}
+                                                className="w-6 h-6 flex items-center justify-center text-gray-600 hover:text-orange-500"
+                                            >
+                                                +
+                                            </button>
+                                        </div>
                                     </div>
                                 );
-                            })}
-                        </div>
-                    )}
+                            });
+                            
+                            // 填充空白项以保持对齐
+                            while (items.length < 3) {
+                                items.push(
+                                    <div key={`placeholder-${rowIndex}-${items.length}`} className="flex-1"></div>
+                                );
+                            }
+                            
+                            return (
+                                <div key={`row-${rowIndex}`} className="flex gap-3">
+                                    {items}
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
 
                 {/* 底部结算区域 */}

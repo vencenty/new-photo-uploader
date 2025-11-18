@@ -239,12 +239,33 @@ export default function PhotoPrintPage() {
                                                     e.currentTarget.style.display = 'none';
                                                 }}
                                             />
+                                            <div className="flex flex-col items-center justify-center absolute inset-0 bg-black/40 rounded-xl">
+                                                {/* 提示文字 */}
+                                                
+                                                    <div className="text-lg font-medium text-red-100 text-lg mb-2">
+                                                        图片不清晰
+                                                    </div>
+
+                                                    {/* 确认按钮 */}
+                                                    <button
+                                                        className="p-2 py-2.5 bg-black text-white rounded-xl text-center text-base active:scale-95 transition text-xs"
+                                                        onClick={() => {
+                                                            // TODO: 你的确认逻辑
+                                                            setShowSizeSelector(false);
+                                                        }}
+                                                    >
+                                                        确认使用
+                                                    </button>
+                                                
+
+                                            </div>
+
                                         </div>
 
                                         {/* 右上角徽章 */}
-                                        <div className="absolute top-2 left-2 bg-yellow-400 rounded-full w-6 h-6 flex items-center justify-center">
-                                            <span className="text-xs">👑</span>
-                                        </div>
+                                        {/* <div className="absolute top-2 left-2 bg-yellow-400 rounded-full w-6 h-6 flex items-center justify-center"> */}
+                                        {/* <span className="text-xs">👑</span> */}
+                                        {/* </div> */}
                                     </div>
                                 </div>
 
@@ -308,10 +329,10 @@ export default function PhotoPrintPage() {
                                                             />
                                                         </div>
 
-                                                        {/* 右上角徽章 */}
-                                                        <div className="absolute top-2 left-2 bg-yellow-400 rounded-full w-6 h-6 flex items-center justify-center">
+                                                        {/* 左上角徽章 */}
+                                                        {/* <div className="absolute top-2 left-2 bg-yellow-400 rounded-full w-6 h-6 flex items-center justify-center">
                                                             <span className="text-xs">👑</span>
-                                                        </div>
+                                                        </div> */}
                                                     </div>
                                                 </div>
 

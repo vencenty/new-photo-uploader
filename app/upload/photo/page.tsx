@@ -88,7 +88,8 @@ export default function PhotoPrintPage() {
 
     const handleAddPhoto = () => {
         // 这里可以实现图片上传逻辑
-        console.log('添加照片');
+        console.log('添加照片123');
+        
     };
 
     const handleSubmitOrder = () => {

@@ -7,6 +7,9 @@ interface Photo {
     id: string;
     url: string;
     quantity: number;
+    fileSize: number; // 文件大小（字节）
+    width?: number; // 图片宽度（像素）
+    height?: number; // 图片高度（像素）
 }
 
 type PhotoSize = '5寸' | '6寸' | '7寸' | '正方形';
@@ -52,6 +55,37 @@ export default function PhotoPrintPage() {
         return {
             paddingTop: `${(1 / currentAspectRatio) * 100}%`
         };
+    };
+
+    // 获取照片的警告信息
+    const getPhotoWarning = (photo: Photo): string | null => {
+        // TODO: 在这里添加更多的判断逻辑
+        
+        // 1. 检查文件大小 - 小于100KB可能模糊
+        if (photo.fileSize < 100 * 1024) {
+            return '照片模糊';
+        }
+
+        // 2. TODO: 检查图片分辨率是否足够
+        // if (photo.width && photo.height) {
+        //     const minResolution = 1200; // 最小分辨率要求
+        //     if (photo.width < minResolution || photo.height < minResolution) {
+        //         return '分辨率过低';
+        //     }
+        // }
+
+        // 3. TODO: 检查宽高比是否合适
+        // if (photo.width && photo.height) {
+        //     const ratio = photo.width / photo.height;
+        //     // 根据选择的规格检查宽高比
+        // }
+
+        // 4. TODO: 其他检查逻辑
+        // - 检查图片是否过度压缩
+        // - 检查图片质量
+        // - 检查图片格式是否合适
+        
+        return null; // 没有警告
     };
 
     const handleQuantityChange = (id: string, delta: number) => {
@@ -116,10 +150,12 @@ export default function PhotoPrintPage() {
                 // 创建图片URL
                 const imageUrl = URL.createObjectURL(file);
 
-                // 预加载图片以确保能正常显示
-                await new Promise<void>((resolve, reject) => {
+                // 预加载图片并获取尺寸
+                const { width, height } = await new Promise<{ width: number; height: number }>((resolve, reject) => {
                     const img = document.createElement('img');
-                    img.onload = () => resolve();
+                    img.onload = () => {
+                        resolve({ width: img.width, height: img.height });
+                    };
                     img.onerror = () => reject(new Error('图片加载失败'));
                     img.src = imageUrl;
                 });
@@ -128,7 +164,10 @@ export default function PhotoPrintPage() {
                 const newPhoto: Photo = {
                     id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                     url: imageUrl,
-                    quantity: 1
+                    quantity: 1,
+                    fileSize: file.size,
+                    width,
+                    height
                 };
 
                 validPhotos.push(newPhoto);
@@ -245,7 +284,7 @@ export default function PhotoPrintPage() {
                             rowPhotos.forEach((photo) => {
                                 items.push(
                                     <div key={photo.id} className="flex-1 relative">
-                                        <div className="bg-white rounded-lg overflow-hidden shadow-sm relative" style={getPhotoContainerStyle()}>
+                                        <div className="bg-white  overflow-hidden shadow-sm relative" style={getPhotoContainerStyle()}>
                                             <div className="absolute inset-0">
                                                 {/* 删除按钮 */}
                                                 <button
@@ -267,12 +306,12 @@ export default function PhotoPrintPage() {
                                                         }}
                                                     />
 
-                                                    {/* 只对未确认的照片显示警告遮罩层 */}
-                                                    {!confirmedPhotos.has(photo.id) && (
+                                                    {/* 只对未确认且有警告的照片显示警告遮罩层 */}
+                                                    {!confirmedPhotos.has(photo.id) && getPhotoWarning(photo) && (
                                                         <div className="flex flex-col items-center justify-center absolute inset-0 bg-black/40 rounded-xl">
-                                                            {/* 提示文字 */}
+                                                            {/* 动态提示文字 */}
                                                             <div className="text-lg font-medium text-red-100 mb-2">
-                                                                图片不清晰
+                                                                {getPhotoWarning(photo)}
                                                             </div>
 
                                                             {/* 确认按钮 */}

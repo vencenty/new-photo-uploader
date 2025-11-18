@@ -9,9 +9,24 @@ interface Photo {
     quantity: number;
 }
 
+type PhotoSize = '5寸' | '6寸' | '7寸';
+
+interface SizeOption {
+    size: PhotoSize;
+    label: string;
+}
+
+const PHOTO_SIZES: SizeOption[] = [
+    { size: '5寸', label: '5寸:光面-普通版' },
+    { size: '6寸', label: '6寸:光面-普通版' },
+    { size: '7寸', label: '7寸:光面-普通版' },
+];
+
 export default function PhotoPrintPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [photos, setPhotos] = useState<Photo[]>([] as Photo[]);
+    const [selectedSize, setSelectedSize] = useState<PhotoSize>('5寸');
+    const [showSizeSelector, setShowSizeSelector] = useState(false);
 
     const PRICE_PER_PHOTO = 3.5;
     const SHIPPING_FEE = 6;
@@ -125,14 +140,14 @@ export default function PhotoPrintPage() {
                 className="hidden"
             />
 
-            <div className="min-h-screen  flex flex-col">
+            <div className="min-h-screen flex flex-col">
             {/* 顶部导航栏 */}
             <header className="bg-white border-b sticky top-0 z-10">
                 <div className="flex items-center justify-between px-4 py-3">
-                    <button className="text-2xl" onClick={() => window.history.back()}>
+                    <button className="text-2xl text-black" onClick={() => window.history.back()}>
                         ←
                     </button>
-                    <h1 className="text-lg font-medium color-red">田田洗照片</h1>
+                    <h1 className="text-lg font-medium text-black">田田洗照片</h1>
                     <button
                         className="text-gray-600 text-sm"
                         onClick={handleClearAll}
@@ -141,6 +156,24 @@ export default function PhotoPrintPage() {
                     </button>
                 </div>
             </header>
+
+            {/* 规格选择区域 */}
+            <div className="bg-white px-4 py-3 border-b">
+                <div 
+                    className="flex items-center justify-between cursor-pointer"
+                    onClick={() => setShowSizeSelector(true)}
+                >
+                    <span className="text-sm text-gray-600">规格</span>
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-900">
+                            {PHOTO_SIZES.find(s => s.size === selectedSize)?.label}
+                        </span>
+                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                    </div>
+                </div>
+            </div>
 
             {/* 打印区域示意 */}
             <div className="px-4 py-3 bg-white">
@@ -205,7 +238,7 @@ export default function PhotoPrintPage() {
                                 >
                                     −
                                 </button>
-                                <span className="text-base font-medium w-8 text-center">{photo.quantity}</span>
+                                <span className="text-base font-medium w-8 text-center text-black">{photo.quantity}</span>
                                 <button
                                     onClick={() => handleQuantityChange(photo.id, 1)}
                                     className="w-6 h-6 flex items-center justify-center text-gray-600 hover:text-orange-500"
@@ -270,7 +303,7 @@ export default function PhotoPrintPage() {
                                                 >
                                                     −
                                                 </button>
-                                                <span className="text-base font-medium w-8 text-center">{photo.quantity}</span>
+                                                <span className="text-base font-medium w-8 text-center text-black">{photo.quantity}</span>
                                                 <button
                                                     onClick={() => handleQuantityChange(photo.id, 1)}
                                                     className="w-6 h-6 flex items-center justify-center text-gray-600 hover:text-orange-500"
@@ -328,6 +361,56 @@ export default function PhotoPrintPage() {
                 </div>
             </div>
             </div>
+
+            {/* 规格选择弹出层 */}
+            {showSizeSelector && (
+                <div 
+                    className="fixed inset-0 bg-opacity-80 z-50 flex items-end"
+                    onClick={() => setShowSizeSelector(false)}
+                >
+                    <div 
+                        className="bg-white w-full rounded-t-2xl animate-slide-up"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* 弹出层标题 */}
+                        <div className="flex items-center justify-between px-4 py-4 border-b">
+                            <span className="text-lg font-medium text-black">选择规格</span>
+                            <button 
+                                onClick={() => setShowSizeSelector(false)}
+                                className="text-gray-400 text-2xl leading-none"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        {/* 规格选项列表 */}
+                        <div className="px-4 py-2">
+                            {PHOTO_SIZES.map((option) => (
+                                <div
+                                    key={option.size}
+                                    className={`flex items-center justify-between py-4 border-b cursor-pointer hover:bg-gray-50 transition-colors ${
+                                        selectedSize === option.size ? 'text-orange-500' : 'text-black'
+                                    }`}
+                                    onClick={() => {
+                                        setSelectedSize(option.size);
+                                        setShowSizeSelector(false);
+                                    }}
+                                >
+                                    <span className="text-base">{option.label}</span>
+                                    {selectedSize === option.size && (
+                                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                        </svg>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* 安全区域 */}
+                        <div className="h-8"></div>
+                    </div>
+                </div>
+            )}
         </>
     );
 }

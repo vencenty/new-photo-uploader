@@ -29,6 +29,8 @@ export default function PhotoPrintPage() {
     const [photos, setPhotos] = useState<Photo[]>([] as Photo[]);
     const [selectedSize, setSelectedSize] = useState<PhotoSize>('5寸');
     const [showSizeSelector, setShowSizeSelector] = useState(false);
+    // 记录已确认的照片 ID
+    const [confirmedPhotos, setConfirmedPhotos] = useState<Set<string>>(new Set());
 
     const PRICE_PER_PHOTO = 3.5;
     const SHIPPING_FEE = 6;
@@ -64,10 +66,23 @@ export default function PhotoPrintPage() {
 
     const handleRemovePhoto = (id: string) => {
         setPhotos(photos.filter(photo => photo.id !== id));
+        // 同时从已确认列表中移除
+        setConfirmedPhotos(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(id);
+            return newSet;
+        });
     };
 
     const handleClearAll = () => {
         setPhotos([]);
+        // 清空已确认列表
+        setConfirmedPhotos(new Set());
+    };
+
+    const handleConfirmPhoto = (id: string) => {
+        // 将照片 ID 添加到已确认列表中
+        setConfirmedPhotos(prev => new Set(prev).add(id));
     };
 
     const handleAddPhoto = () => {
@@ -252,30 +267,27 @@ export default function PhotoPrintPage() {
                                                         }}
                                                     />
 
-                                    <div className="flex flex-col items-center justify-center absolute inset-0 bg-black/40 rounded-xl">
-                                                {/* 提示文字 */}
-                                                
-                                                    <div className="text-lg font-medium text-red-100 text-lg mb-2">
-                                                        图片不清晰
-                                                    </div>
+                                                    {/* 只对未确认的照片显示警告遮罩层 */}
+                                                    {!confirmedPhotos.has(photo.id) && (
+                                                        <div className="flex flex-col items-center justify-center absolute inset-0 bg-black/40 rounded-xl">
+                                                            {/* 提示文字 */}
+                                                            <div className="text-lg font-medium text-red-100 mb-2">
+                                                                图片不清晰
+                                                            </div>
 
-                                                    {/* 确认按钮 */}
-                                                    <button
-                                                        className="p-2 py-2.5 bg-black text-white rounded-xl text-center text-base active:scale-95 transition text-xs"
-                                                        onClick={() => {
-                                                            // TODO: 你的确认逻辑
-                                                            setShowSizeSelector(false);
-                                                        }}
-                                                    >
-                                                        确认使用
-                                                    </button>
-                                                
-
-                                            </div>
-
+                                                            {/* 确认按钮 */}
+                                                            <button
+                                                                className="px-4 py-2.5 bg-white text-black rounded-xl text-center text-sm font-medium active:scale-95 transition hover:bg-gray-100"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleConfirmPhoto(photo.id);
+                                                                }}
+                                                            >
+                                                                确认使用
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            
-
                                             </div>
                                         </div>
 

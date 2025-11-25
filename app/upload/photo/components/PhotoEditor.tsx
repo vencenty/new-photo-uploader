@@ -429,6 +429,23 @@ export function PhotoEditor({
                     </svg>
                     <span>显示区域即为打印区域，请点击图片进行调整</span>
                 </div>
+                {styleType === 'full_bleed' && (
+                    <div className="flex items-center gap-2 text-xs text-red-500 mt-1">
+                        <div 
+                            className="w-4 h-4 rounded-sm"
+                            style={{
+                                background: `repeating-linear-gradient(
+                                    -45deg,
+                                    transparent,
+                                    transparent 2px,
+                                    rgba(239, 68, 68, 0.5) 2px,
+                                    rgba(239, 68, 68, 0.5) 4px
+                                )`,
+                            }}
+                        />
+                        <span>斜线区域为出血区域，此区域内容可能被裁切</span>
+                    </div>
+                )}
             </div>
 
             {/* 图片编辑区域 */}
@@ -506,6 +523,72 @@ export function PhotoEditor({
                                             height: photo.height ? `${photo.height}px` : 'auto',
                                         }}
                                         draggable={false}
+                                    />
+                                </div>
+
+                                {/* 出血线警告遮罩 - 四周斜线区域 */}
+                                <div className="absolute inset-0 pointer-events-none">
+                                    {/* 上边出血区域 */}
+                                    <div 
+                                        className="absolute top-0 left-0 right-0 h-[5%]"
+                                        style={{
+                                            background: `repeating-linear-gradient(
+                                                -45deg,
+                                                transparent,
+                                                transparent 3px,
+                                                rgba(239, 68, 68, 0.4) 3px,
+                                                rgba(239, 68, 68, 0.4) 6px
+                                            )`,
+                                        }}
+                                    />
+                                    {/* 下边出血区域 */}
+                                    <div 
+                                        className="absolute bottom-0 left-0 right-0 h-[5%]"
+                                        style={{
+                                            background: `repeating-linear-gradient(
+                                                -45deg,
+                                                transparent,
+                                                transparent 3px,
+                                                rgba(239, 68, 68, 0.4) 3px,
+                                                rgba(239, 68, 68, 0.4) 6px
+                                            )`,
+                                        }}
+                                    />
+                                    {/* 左边出血区域 */}
+                                    <div 
+                                        className="absolute top-[5%] bottom-[5%] left-0 w-[5%]"
+                                        style={{
+                                            background: `repeating-linear-gradient(
+                                                -45deg,
+                                                transparent,
+                                                transparent 3px,
+                                                rgba(239, 68, 68, 0.4) 3px,
+                                                rgba(239, 68, 68, 0.4) 6px
+                                            )`,
+                                        }}
+                                    />
+                                    {/* 右边出血区域 */}
+                                    <div 
+                                        className="absolute top-[5%] bottom-[5%] right-0 w-[5%]"
+                                        style={{
+                                            background: `repeating-linear-gradient(
+                                                -45deg,
+                                                transparent,
+                                                transparent 3px,
+                                                rgba(239, 68, 68, 0.4) 3px,
+                                                rgba(239, 68, 68, 0.4) 6px
+                                            )`,
+                                        }}
+                                    />
+                                    {/* 安全区域内边框线 */}
+                                    <div 
+                                        className="absolute border border-dashed border-red-400"
+                                        style={{
+                                            top: '5%',
+                                            left: '5%',
+                                            right: '5%',
+                                            bottom: '5%',
+                                        }}
                                     />
                                 </div>
                             </div>

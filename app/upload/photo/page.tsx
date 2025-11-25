@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Photo, PhotoSize, PHOTO_SIZES } from './types/photo.types';
+import { Photo, PhotoSize, StyleType, PHOTO_SIZES } from './types/photo.types';
 import { PhotoEditor } from './components/PhotoEditor';
 import { SizeSelector } from './components/SizeSelector';
 import { PhotoCard } from './components/PhotoCard';
@@ -11,6 +11,7 @@ export default function PhotoPrintPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [photos, setPhotos] = useState<Photo[]>([]);
     const [selectedSize, setSelectedSize] = useState<PhotoSize>('5寸');
+    const [selectedStyle, setSelectedStyle] = useState<StyleType>('full_bleed');
     const [showSizeSelector, setShowSizeSelector] = useState(false);
     const [confirmedPhotos, setConfirmedPhotos] = useState<Set<string>>(new Set());
     const [editingPhoto, setEditingPhoto] = useState<Photo | null>(null);
@@ -169,9 +170,14 @@ export default function PhotoPrintPage() {
                     >
                         <span className="text-sm text-gray-600">规格</span>
                         <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-900">
-                                {PHOTO_SIZES.find((s) => s.size === selectedSize)?.label}
-                            </span>
+                            <div className="text-right">
+                                <div className="text-sm text-gray-900">
+                                    {PHOTO_SIZES.find((s) => s.size === selectedSize)?.label}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                    {PHOTO_SIZES.find((s) => s.size === selectedSize)?.styles.find((st) => st.type === selectedStyle)?.label}
+                                </div>
+                            </div>
                             <svg
                                 className="w-4 h-4 text-gray-400"
                                 fill="none"
@@ -238,6 +244,7 @@ export default function PhotoPrintPage() {
                                             key={photo.id}
                                             photo={photo}
                                             containerStyle={getPhotoContainerStyle()}
+                                            styleType={selectedStyle}
                                             isConfirmed={confirmedPhotos.has(photo.id)}
                                             warningMessage={getPhotoWarning(photo)}
                                             onRemove={() => handleRemovePhoto(photo.id)}
@@ -312,7 +319,9 @@ export default function PhotoPrintPage() {
             {showSizeSelector && (
                 <SizeSelector
                     selectedSize={selectedSize}
+                    selectedStyle={selectedStyle}
                     onSelectSize={setSelectedSize}
+                    onSelectStyle={setSelectedStyle}
                     onClose={() => setShowSizeSelector(false)}
                 />
             )}
@@ -322,6 +331,7 @@ export default function PhotoPrintPage() {
                 <PhotoEditor
                     photo={editingPhoto}
                     aspectRatio={currentAspectRatio}
+                    styleType={selectedStyle}
                     onClose={() => setEditingPhoto(null)}
                     onSave={(updatedPhoto) => {
                         // 保存编辑后的照片信息

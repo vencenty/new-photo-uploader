@@ -1,16 +1,17 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Photo } from '../types/photo.types';
+import { Photo, StyleType } from '../types/photo.types';
 
 interface PhotoEditorProps {
     photo: Photo;
     aspectRatio: number;
+    styleType: StyleType;
     onClose: () => void;
     onSave: (photo: Photo) => void;
 }
 
-export function PhotoEditor({ photo, aspectRatio, onClose, onSave }: PhotoEditorProps) {
+export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: PhotoEditorProps) {
     const [scale, setScale] = useState(1);
     const [position, setPosition] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
@@ -289,38 +290,80 @@ export function PhotoEditor({ photo, aspectRatio, onClose, onSave }: PhotoEditor
                 <div className="relative w-full max-w-lg">
                     {/* 裁剪框 - 保持宽高比 */}
                     <div 
-                        ref={containerRef}
                         className="relative w-full bg-white shadow-2xl overflow-hidden"
                         style={{ 
                             paddingTop: `${(1 / aspectRatio) * 100}%`,
                         }}
                     >
-                        {/* 可拖动的图片 */}
-                        <div 
-                            ref={imageRef}
-                            className="absolute inset-0 cursor-move select-none touch-none"
-                            onMouseDown={handleMouseDown}
-                            onMouseMove={handleMouseMove}
-                            onMouseUp={handleMouseUp}
-                            onMouseLeave={handleMouseUp}
-                            onWheel={handleWheel}
-                            onTouchStart={handleTouchStart}
-                            onTouchMove={handleTouchMove}
-                            onTouchEnd={handleTouchEnd}
-                        >
-                            <img
-                                src={photo.url}
-                                alt="编辑照片"
-                                className="absolute top-1/2 left-1/2 max-w-none pointer-events-none"
-                                style={{
-                                    transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
-                                    transition: isDragging ? 'none' : 'transform 0.3s ease',
-                                    width: photo.width ? `${photo.width}px` : 'auto',
-                                    height: photo.height ? `${photo.height}px` : 'auto',
-                                }}
-                                draggable={false}
-                            />
-                        </div>
+                        {styleType === 'white_margin' ? (
+                            // 留白样式 - 添加白边，图片在内部区域显示
+                            <div className="absolute inset-0 p-[8%] flex items-center justify-center">
+                                <div 
+                                    ref={containerRef}
+                                    className="relative w-full h-full bg-gray-50 overflow-hidden"
+                                >
+                                    {/* 可拖动的图片 */}
+                                    <div 
+                                        ref={imageRef}
+                                        className="absolute inset-0 cursor-move select-none touch-none"
+                                        onMouseDown={handleMouseDown}
+                                        onMouseMove={handleMouseMove}
+                                        onMouseUp={handleMouseUp}
+                                        onMouseLeave={handleMouseUp}
+                                        onWheel={handleWheel}
+                                        onTouchStart={handleTouchStart}
+                                        onTouchMove={handleTouchMove}
+                                        onTouchEnd={handleTouchEnd}
+                                    >
+                                        <img
+                                            src={photo.url}
+                                            alt="编辑照片"
+                                            className="absolute top-1/2 left-1/2 max-w-none pointer-events-none"
+                                            style={{
+                                                transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
+                                                transition: isDragging ? 'none' : 'transform 0.3s ease',
+                                                width: photo.width ? `${photo.width}px` : 'auto',
+                                                height: photo.height ? `${photo.height}px` : 'auto',
+                                            }}
+                                            draggable={false}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            // 满版样式 - 原有的显示方式
+                            <div 
+                                ref={containerRef}
+                                className="absolute inset-0"
+                            >
+                                {/* 可拖动的图片 */}
+                                <div 
+                                    ref={imageRef}
+                                    className="absolute inset-0 cursor-move select-none touch-none"
+                                    onMouseDown={handleMouseDown}
+                                    onMouseMove={handleMouseMove}
+                                    onMouseUp={handleMouseUp}
+                                    onMouseLeave={handleMouseUp}
+                                    onWheel={handleWheel}
+                                    onTouchStart={handleTouchStart}
+                                    onTouchMove={handleTouchMove}
+                                    onTouchEnd={handleTouchEnd}
+                                >
+                                    <img
+                                        src={photo.url}
+                                        alt="编辑照片"
+                                        className="absolute top-1/2 left-1/2 max-w-none pointer-events-none"
+                                        style={{
+                                            transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
+                                            transition: isDragging ? 'none' : 'transform 0.3s ease',
+                                            width: photo.width ? `${photo.width}px` : 'auto',
+                                            height: photo.height ? `${photo.height}px` : 'auto',
+                                        }}
+                                        draggable={false}
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* 图片序号 - TODO: 实现切换功能 */}

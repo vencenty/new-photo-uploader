@@ -1,11 +1,12 @@
 'use client';
 
-import { Photo } from '../types/photo.types';
+import { Photo, StyleType } from '../types/photo.types';
 import { useRef, useEffect, useState } from 'react';
 
 interface PhotoCardProps {
     photo: Photo;
     containerStyle: React.CSSProperties;
+    styleType: StyleType;
     isConfirmed: boolean;
     warningMessage: string | null;
     onRemove: () => void;
@@ -17,6 +18,7 @@ interface PhotoCardProps {
 export function PhotoCard({
     photo,
     containerStyle,
+    styleType,
     isConfirmed,
     warningMessage,
     onRemove,
@@ -87,75 +89,149 @@ export function PhotoCard({
                 className="bg-white overflow-hidden shadow-sm relative"
                 style={containerStyle}
             >
-                <div className="absolute inset-0">
-                    {/* 删除按钮 */}
-                    <button
-                        onClick={onRemove}
-                        className="absolute top-2 right-2 z-10 w-6 h-6 bg-black bg-opacity-50 rounded-full flex items-center justify-center text-white hover:bg-opacity-70 transition-all"
-                    >
-                        ×
-                    </button>
+                {styleType === 'white_margin' ? (
+                    // 留白样式 - 添加白边
+                    <div className="absolute inset-0 p-[8%] flex items-center justify-center">
+                        {/* 删除按钮 */}
+                        <button
+                            onClick={onRemove}
+                            className="absolute top-2 right-2 z-10 w-6 h-6 bg-black bg-opacity-50 rounded-full flex items-center justify-center text-white hover:bg-opacity-70 transition-all"
+                        >
+                            ×
+                        </button>
 
-                    {/* 图片 */}
-                    <div
-                        className={`w-full h-full overflow-hidden ${
-                            warningMessage && !isConfirmed ? 'cursor-not-allowed' : 'cursor-pointer'
-                        }`}
-                        onClick={handleImageClick}
-                    >
-                        {photo.transform && scaledTransform ? (
-                            // 如果有编辑信息，显示编辑后的效果
-                            <div className="relative w-full h-full">
+                        {/* 图片区域 */}
+                        <div
+                            className={`w-full h-full bg-gray-50 overflow-hidden ${
+                                warningMessage && !isConfirmed ? 'cursor-not-allowed' : 'cursor-pointer'
+                            }`}
+                            onClick={handleImageClick}
+                        >
+                            {photo.transform && scaledTransform ? (
+                                // 如果有编辑信息，显示编辑后的效果
+                                <div className="relative w-full h-full">
+                                    <img
+                                        src={photo.url}
+                                        alt="照片"
+                                        className="absolute top-1/2 left-1/2 max-w-none pointer-events-none"
+                                        style={{
+                                            transform: `translate(-50%, -50%) translate(${scaledTransform.position.x}px, ${scaledTransform.position.y}px) scale(${scaledTransform.scale}) rotate(${photo.transform.rotation}deg)`,
+                                            width: photo.width ? `${photo.width}px` : 'auto',
+                                            height: photo.height ? `${photo.height}px` : 'auto',
+                                        }}
+                                        onError={(e) => {
+                                            console.error('图片加载失败:', photo.url);
+                                            e.currentTarget.style.display = 'none';
+                                        }}
+                                    />
+                                </div>
+                            ) : (
+                                // 没有编辑信息，使用默认的 object-contain
                                 <img
                                     src={photo.url}
                                     alt="照片"
-                                    className="absolute top-1/2 left-1/2 max-w-none pointer-events-none"
-                                    style={{
-                                        transform: `translate(-50%, -50%) translate(${scaledTransform.position.x}px, ${scaledTransform.position.y}px) scale(${scaledTransform.scale}) rotate(${photo.transform.rotation}deg)`,
-                                        width: photo.width ? `${photo.width}px` : 'auto',
-                                        height: photo.height ? `${photo.height}px` : 'auto',
-                                    }}
+                                    className="w-full h-full object-contain"
                                     onError={(e) => {
                                         console.error('图片加载失败:', photo.url);
                                         e.currentTarget.style.display = 'none';
                                     }}
                                 />
-                            </div>
-                        ) : (
-                            // 没有编辑信息，使用默认的 object-cover
-                            <img
-                                src={photo.url}
-                                alt="照片"
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                    console.error('图片加载失败:', photo.url);
-                                    e.currentTarget.style.display = 'none';
-                                }}
-                            />
-                        )}
+                            )}
 
-                        {/* 只对未确认且有警告的照片显示警告遮罩层 */}
-                        {!isConfirmed && warningMessage && (
-                            <div className="flex flex-col items-center justify-center absolute inset-0 bg-black/40">
-                                {/* 动态提示文字 */}
-                                <div className="text-lg font-medium text-red-100 mb-2">
-                                    {warningMessage}
+                            {/* 只对未确认且有警告的照片显示警告遮罩层 */}
+                            {!isConfirmed && warningMessage && (
+                                <div className="flex flex-col items-center justify-center absolute inset-0 bg-black/40">
+                                    {/* 动态提示文字 */}
+                                    <div className="text-lg font-medium text-red-100 mb-2">
+                                        {warningMessage}
+                                    </div>
+
+                                    {/* 确认按钮 */}
+                                    <button
+                                        className="px-2 py-1.5 bg-white text-black rounded-xl text-center text-sm font-medium active:scale-95 transition hover:bg-gray-100"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onConfirm();
+                                        }}
+                                    >
+                                        确认使用
+                                    </button>
                                 </div>
-
-                                {/* 确认按钮 */}
-                                <button
-                                    className="px-2 py-1.5 bg-white text-black rounded-xl text-center text-sm font-medium active:scale-95 transition hover:bg-gray-100"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onConfirm();
-                                    }}
-                                >
-                                    确认使用
-                                </button>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
-                </div>
+                ) : (
+                    // 满版样式 - 原有的显示方式
+                    <div className="absolute inset-0">
+                        {/* 删除按钮 */}
+                        <button
+                            onClick={onRemove}
+                            className="absolute top-2 right-2 z-10 w-6 h-6 bg-black bg-opacity-50 rounded-full flex items-center justify-center text-white hover:bg-opacity-70 transition-all"
+                        >
+                            ×
+                        </button>
+
+                        {/* 图片 */}
+                        <div
+                            className={`w-full h-full overflow-hidden ${
+                                warningMessage && !isConfirmed ? 'cursor-not-allowed' : 'cursor-pointer'
+                            }`}
+                            onClick={handleImageClick}
+                        >
+                            {photo.transform && scaledTransform ? (
+                                // 如果有编辑信息，显示编辑后的效果
+                                <div className="relative w-full h-full">
+                                    <img
+                                        src={photo.url}
+                                        alt="照片"
+                                        className="absolute top-1/2 left-1/2 max-w-none pointer-events-none"
+                                        style={{
+                                            transform: `translate(-50%, -50%) translate(${scaledTransform.position.x}px, ${scaledTransform.position.y}px) scale(${scaledTransform.scale}) rotate(${photo.transform.rotation}deg)`,
+                                            width: photo.width ? `${photo.width}px` : 'auto',
+                                            height: photo.height ? `${photo.height}px` : 'auto',
+                                        }}
+                                        onError={(e) => {
+                                            console.error('图片加载失败:', photo.url);
+                                            e.currentTarget.style.display = 'none';
+                                        }}
+                                    />
+                                </div>
+                            ) : (
+                                // 没有编辑信息，使用默认的 object-cover
+                                <img
+                                    src={photo.url}
+                                    alt="照片"
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                        console.error('图片加载失败:', photo.url);
+                                        e.currentTarget.style.display = 'none';
+                                    }}
+                                />
+                            )}
+
+                            {/* 只对未确认且有警告的照片显示警告遮罩层 */}
+                            {!isConfirmed && warningMessage && (
+                                <div className="flex flex-col items-center justify-center absolute inset-0 bg-black/40">
+                                    {/* 动态提示文字 */}
+                                    <div className="text-lg font-medium text-red-100 mb-2">
+                                        {warningMessage}
+                                    </div>
+
+                                    {/* 确认按钮 */}
+                                    <button
+                                        className="px-2 py-1.5 bg-white text-black rounded-xl text-center text-sm font-medium active:scale-95 transition hover:bg-gray-100"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onConfirm();
+                                        }}
+                                    >
+                                        确认使用
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* 数量调整器 */}

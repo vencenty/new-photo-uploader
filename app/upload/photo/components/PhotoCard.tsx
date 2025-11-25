@@ -1,6 +1,7 @@
 'use client';
 
 import { Photo } from '../types/photo.types';
+import { useRef, useEffect, useState } from 'react';
 
 interface PhotoCardProps {
     photo: Photo;
@@ -23,9 +24,57 @@ export function PhotoCard({
     onConfirm,
     onEdit,
 }: PhotoCardProps) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [scaledTransform, setScaledTransform] = useState<{
+        position: { x: number; y: number };
+        scale: number;
+    } | null>(null);
+
+    // 当容器尺寸或照片变化时，重新计算缩放后的变换
+    useEffect(() => {
+        if (!photo.transform || !photo.width || !photo.height) {
+            setScaledTransform(null);
+            return;
+        }
+
+        // 检查是否有容器尺寸信息（兼容旧数据）
+        if (!photo.transform.containerWidth || !photo.transform.containerHeight) {
+            setScaledTransform(null);
+            return;
+        }
+
+        // 使用 requestAnimationFrame 确保容器已完成渲染
+        const updateTransform = () => {
+            if (!containerRef.current || !photo.transform) return;
+            
+            const currentWidth = containerRef.current.offsetWidth;
+            
+            // 如果容器宽度为 0，说明还没渲染完成，延迟更新
+            if (currentWidth === 0) {
+                requestAnimationFrame(updateTransform);
+                return;
+            }
+            
+            // 由于编辑器和列表使用相同的宽高比，按宽度比例缩放即可
+            const scaleRatio = currentWidth / photo.transform.containerWidth;
+
+            // 按比例调整 position 和 scale
+            setScaledTransform({
+                position: {
+                    x: photo.transform.position.x * scaleRatio,
+                    y: photo.transform.position.y * scaleRatio,
+                },
+                scale: photo.transform.scale * scaleRatio,
+            });
+        };
+
+        requestAnimationFrame(updateTransform);
+    }, [photo, photo.transform]);
+
     return (
         <div className="flex-1 relative">
             <div
+                ref={containerRef}
                 className="bg-white overflow-hidden shadow-sm relative"
                 style={containerStyle}
             >
@@ -43,7 +92,7 @@ export function PhotoCard({
                         className="w-full h-full cursor-pointer overflow-hidden"
                         onClick={onEdit}
                     >
-                        {photo.transform ? (
+                        {photo.transform && scaledTransform ? (
                             // 如果有编辑信息，显示编辑后的效果
                             <div className="relative w-full h-full">
                                 <img
@@ -51,7 +100,7 @@ export function PhotoCard({
                                     alt="照片"
                                     className="absolute top-1/2 left-1/2 max-w-none pointer-events-none"
                                     style={{
-                                        transform: `translate(-50%, -50%) translate(${photo.transform.position.x}px, ${photo.transform.position.y}px) scale(${photo.transform.scale}) rotate(${photo.transform.rotation}deg)`,
+                                        transform: `translate(-50%, -50%) translate(${scaledTransform.position.x}px, ${scaledTransform.position.y}px) scale(${scaledTransform.scale}) rotate(${photo.transform.rotation}deg)`,
                                         width: photo.width ? `${photo.width}px` : 'auto',
                                         height: photo.height ? `${photo.height}px` : 'auto',
                                     }}

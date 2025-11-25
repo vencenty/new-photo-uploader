@@ -2,6 +2,8 @@ export interface PhotoTransform {
     position: { x: number; y: number };
     scale: number;
     rotation: number;
+    containerWidth: number; // 保存时编辑器容器的宽度
+    containerHeight: number; // 保存时编辑器容器的高度
 }
 
 export interface Photo {

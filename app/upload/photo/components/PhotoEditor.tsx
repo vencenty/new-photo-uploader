@@ -238,12 +238,16 @@ export function PhotoEditor({ photo, aspectRatio, onClose, onSave }: PhotoEditor
     };
 
     const handleSave = () => {
+        if (!containerRef.current) return;
+        
         const updatedPhoto = {
             ...photo,
             transform: {
                 position,
                 scale,
                 rotation,
+                containerWidth: containerRef.current.offsetWidth,
+                containerHeight: containerRef.current.offsetHeight,
             },
         };
         onSave(updatedPhoto);

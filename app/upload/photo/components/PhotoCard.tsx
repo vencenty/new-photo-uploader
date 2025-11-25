@@ -40,18 +40,39 @@ export function PhotoCard({
 
                     {/* 图片 */}
                     <div
-                        className="w-full h-full cursor-pointer"
+                        className="w-full h-full cursor-pointer overflow-hidden"
                         onClick={onEdit}
                     >
-                        <img
-                            src={photo.url}
-                            alt="照片"
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                                console.error('图片加载失败:', photo.url);
-                                e.currentTarget.style.display = 'none';
-                            }}
-                        />
+                        {photo.transform ? (
+                            // 如果有编辑信息，显示编辑后的效果
+                            <div className="relative w-full h-full">
+                                <img
+                                    src={photo.url}
+                                    alt="照片"
+                                    className="absolute top-1/2 left-1/2 max-w-none pointer-events-none"
+                                    style={{
+                                        transform: `translate(-50%, -50%) translate(${photo.transform.position.x}px, ${photo.transform.position.y}px) scale(${photo.transform.scale}) rotate(${photo.transform.rotation}deg)`,
+                                        width: photo.width ? `${photo.width}px` : 'auto',
+                                        height: photo.height ? `${photo.height}px` : 'auto',
+                                    }}
+                                    onError={(e) => {
+                                        console.error('图片加载失败:', photo.url);
+                                        e.currentTarget.style.display = 'none';
+                                    }}
+                                />
+                            </div>
+                        ) : (
+                            // 没有编辑信息，使用默认的 object-cover
+                            <img
+                                src={photo.url}
+                                alt="照片"
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                    console.error('图片加载失败:', photo.url);
+                                    e.currentTarget.style.display = 'none';
+                                }}
+                            />
+                        )}
 
                         {/* 只对未确认且有警告的照片显示警告遮罩层 */}
                         {!isConfirmed && warningMessage && (

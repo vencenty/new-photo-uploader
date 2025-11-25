@@ -1,3 +1,9 @@
+export interface PhotoTransform {
+    position: { x: number; y: number };
+    scale: number;
+    rotation: number;
+}
+
 export interface Photo {
     id: string;
     url: string;
@@ -5,6 +11,7 @@ export interface Photo {
     fileSize: number; // 文件大小（字节）
     width?: number; // 图片宽度（像素）
     height?: number; // 图片高度（像素）
+    transform?: PhotoTransform; // 编辑后的变换信息
 }
 
 export type PhotoSize = '5寸' | '6寸' | '7寸' | '正方形';

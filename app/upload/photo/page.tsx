@@ -75,9 +75,9 @@ export default function PhotoPrintPage() {
         if (!files || files.length === 0) return;
 
         const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-        const validPhotos: Photo[] = [];
         const errors: string[] = [];
 
+        // 逐个加载和渲染照片
         for (const file of Array.from(files)) {
             if (!file.type.startsWith('image/')) {
                 errors.push(`${file.name} 不是图片文件`);
@@ -113,15 +113,12 @@ export default function PhotoPrintPage() {
                     height,
                 };
 
-                validPhotos.push(newPhoto);
+                // 每加载完一张照片就立即添加到列表中
+                setPhotos((prevPhotos) => [...prevPhotos, newPhoto]);
             } catch (error) {
                 errors.push(`${file.name} 加载失败`);
                 console.error(`图片加载错误:`, error);
             }
-        }
-
-        if (validPhotos.length > 0) {
-            setPhotos((prevPhotos) => [...prevPhotos, ...validPhotos]);
         }
 
         if (errors.length > 0) {
@@ -327,7 +324,10 @@ export default function PhotoPrintPage() {
                     aspectRatio={currentAspectRatio}
                     onClose={() => setEditingPhoto(null)}
                     onSave={(updatedPhoto) => {
-                        // TODO: 保存编辑后的照片信息
+                        // 保存编辑后的照片信息
+                        setPhotos(photos.map((p) => 
+                            p.id === updatedPhoto.id ? updatedPhoto : p
+                        ));
                         setEditingPhoto(null);
                     }}
                 />

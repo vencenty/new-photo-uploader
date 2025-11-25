@@ -42,8 +42,18 @@ export function PhotoEditor({ photo, aspectRatio, onClose, onSave }: PhotoEditor
             newScale = containerWidth / photo.width;
         }
 
-        setScale(newScale);
-        setInitialScale(newScale);
+        // 如果有保存的变换信息，使用保存的值；否则使用默认值
+        if (photo.transform) {
+            setPosition(photo.transform.position);
+            setScale(photo.transform.scale);
+            setRotation(photo.transform.rotation);
+            setInitialScale(newScale);
+        } else {
+            setScale(newScale);
+            setInitialScale(newScale);
+            setPosition({ x: 0, y: 0 });
+            setRotation(0);
+        }
     }, [photo, aspectRatio]);
 
     const handleTouchStart = (e: React.TouchEvent) => {
@@ -97,6 +107,18 @@ export function PhotoEditor({ photo, aspectRatio, onClose, onSave }: PhotoEditor
         setRotation(0);
     };
 
+    const handleSave = () => {
+        const updatedPhoto = {
+            ...photo,
+            transform: {
+                position,
+                scale,
+                rotation,
+            },
+        };
+        onSave(updatedPhoto);
+    };
+
     return (
         <div className="fixed inset-0 bg-white z-50 flex flex-col">
             {/* 顶部导航栏 */}
@@ -111,7 +133,7 @@ export function PhotoEditor({ photo, aspectRatio, onClose, onSave }: PhotoEditor
                     <h1 className="text-lg font-medium text-black">一刻相册</h1>
                     <button
                         className="bg-black text-white px-6 py-2 rounded-full text-sm font-medium"
-                        onClick={() => onSave(photo)}
+                        onClick={handleSave}
                     >
                         完成
                     </button>

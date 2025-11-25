@@ -105,6 +105,9 @@ export default function PhotoPrintPage() {
                     img.src = imageUrl;
                 });
 
+                // 检测是否为横图（宽度大于高度）
+                const isLandscape = width > height;
+
                 const newPhoto: Photo = {
                     id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                     url: imageUrl,
@@ -112,6 +115,7 @@ export default function PhotoPrintPage() {
                     fileSize: file.size,
                     width,
                     height,
+                    autoRotated: isLandscape, // 标记横图需要自动旋转
                 };
 
                 // 每加载完一张照片就立即添加到列表中

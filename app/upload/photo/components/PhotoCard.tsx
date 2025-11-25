@@ -27,9 +27,11 @@ export function PhotoCard({
     onEdit,
 }: PhotoCardProps) {
     const containerRef = useRef<HTMLDivElement>(null);
+    const innerContainerRef = useRef<HTMLDivElement>(null);
     const [scaledTransform, setScaledTransform] = useState<{
         position: { x: number; y: number };
         scale: number;
+        rotation: number;
     } | null>(null);
 
     // 处理图片点击，只有确认后才能进入编辑
@@ -43,44 +45,74 @@ export function PhotoCard({
 
     // 当容器尺寸或照片变化时，重新计算缩放后的变换
     useEffect(() => {
-        if (!photo.transform || !photo.width || !photo.height) {
-            setScaledTransform(null);
-            return;
-        }
-
-        // 检查是否有容器尺寸信息（兼容旧数据）
-        if (!photo.transform.containerWidth || !photo.transform.containerHeight) {
+        if (!photo.width || !photo.height) {
             setScaledTransform(null);
             return;
         }
 
         // 使用 requestAnimationFrame 确保容器已完成渲染
         const updateTransform = () => {
-            if (!containerRef.current || !photo.transform) return;
+            const targetRef = styleType === 'white_margin' ? innerContainerRef : containerRef;
+            if (!targetRef.current) return;
             
-            const currentWidth = containerRef.current.offsetWidth;
+            const currentWidth = targetRef.current.offsetWidth;
+            const currentHeight = targetRef.current.offsetHeight;
             
             // 如果容器宽度为 0，说明还没渲染完成，延迟更新
             if (currentWidth === 0) {
                 requestAnimationFrame(updateTransform);
                 return;
             }
-            
-            // 由于编辑器和列表使用相同的宽高比，按宽度比例缩放即可
-            const scaleRatio = currentWidth / photo.transform.containerWidth;
 
-            // 按比例调整 position 和 scale
-            setScaledTransform({
-                position: {
-                    x: photo.transform.position.x * scaleRatio,
-                    y: photo.transform.position.y * scaleRatio,
-                },
-                scale: photo.transform.scale * scaleRatio,
-            });
+            if (photo.transform) {
+                // 如果有编辑信息，按比例缩放
+                if (!photo.transform.containerWidth || !photo.transform.containerHeight) {
+                    setScaledTransform(null);
+                    return;
+                }
+
+                const scaleRatio = currentWidth / photo.transform.containerWidth;
+
+                setScaledTransform({
+                    position: {
+                        x: photo.transform.position.x * scaleRatio,
+                        y: photo.transform.position.y * scaleRatio,
+                    },
+                    scale: photo.transform.scale * scaleRatio,
+                    rotation: photo.transform.rotation,
+                });
+            } else if (photo.autoRotated && photo.width && photo.height) {
+                // 自动旋转的照片，手动计算缩放
+                const actualWidth = photo.height; // 旋转后宽高互换
+                const actualHeight = photo.width;
+                const imageAspectRatio = actualWidth / actualHeight;
+                const containerAspectRatio = currentWidth / currentHeight;
+
+                let calculatedScale: number;
+                if (styleType === 'white_margin') {
+                    // 留白模式：object-contain
+                    calculatedScale = imageAspectRatio > containerAspectRatio
+                        ? currentWidth / actualWidth
+                        : currentHeight / actualHeight;
+                } else {
+                    // 满版模式：object-cover
+                    calculatedScale = imageAspectRatio > containerAspectRatio
+                        ? currentHeight / actualHeight
+                        : currentWidth / actualWidth;
+                }
+
+                setScaledTransform({
+                    position: { x: 0, y: 0 },
+                    scale: calculatedScale,
+                    rotation: 90,
+                });
+            } else {
+                setScaledTransform(null);
+            }
         };
 
         requestAnimationFrame(updateTransform);
-    }, [photo, photo.transform]);
+    }, [photo, photo.transform, photo.autoRotated, styleType]);
 
     return (
         <div className="flex-1 relative">
@@ -102,20 +134,21 @@ export function PhotoCard({
 
                         {/* 图片区域 */}
                         <div
+                            ref={innerContainerRef}
                             className={`w-full h-full bg-gray-50 overflow-hidden ${
                                 warningMessage && !isConfirmed ? 'cursor-not-allowed' : 'cursor-pointer'
                             }`}
                             onClick={handleImageClick}
                         >
-                            {photo.transform && scaledTransform ? (
-                                // 如果有编辑信息，显示编辑后的效果
+                            {scaledTransform ? (
+                                // 有 transform 信息（编辑后或自动旋转）
                                 <div className="relative w-full h-full">
                                     <img
                                         src={photo.url}
                                         alt="照片"
                                         className="absolute top-1/2 left-1/2 max-w-none pointer-events-none"
                                         style={{
-                                            transform: `translate(-50%, -50%) translate(${scaledTransform.position.x}px, ${scaledTransform.position.y}px) scale(${scaledTransform.scale}) rotate(${photo.transform.rotation}deg)`,
+                                            transform: `translate(-50%, -50%) translate(${scaledTransform.position.x}px, ${scaledTransform.position.y}px) scale(${scaledTransform.scale}) rotate(${scaledTransform.rotation}deg)`,
                                             width: photo.width ? `${photo.width}px` : 'auto',
                                             height: photo.height ? `${photo.height}px` : 'auto',
                                         }}
@@ -126,7 +159,7 @@ export function PhotoCard({
                                     />
                                 </div>
                             ) : (
-                                // 没有编辑信息，使用默认的 object-contain
+                                // 没有任何变换，使用默认的 object-contain
                                 <img
                                     src={photo.url}
                                     alt="照片"
@@ -178,15 +211,15 @@ export function PhotoCard({
                             }`}
                             onClick={handleImageClick}
                         >
-                            {photo.transform && scaledTransform ? (
-                                // 如果有编辑信息，显示编辑后的效果
+                            {scaledTransform ? (
+                                // 有 transform 信息（编辑后或自动旋转）
                                 <div className="relative w-full h-full">
                                     <img
                                         src={photo.url}
                                         alt="照片"
                                         className="absolute top-1/2 left-1/2 max-w-none pointer-events-none"
                                         style={{
-                                            transform: `translate(-50%, -50%) translate(${scaledTransform.position.x}px, ${scaledTransform.position.y}px) scale(${scaledTransform.scale}) rotate(${photo.transform.rotation}deg)`,
+                                            transform: `translate(-50%, -50%) translate(${scaledTransform.position.x}px, ${scaledTransform.position.y}px) scale(${scaledTransform.scale}) rotate(${scaledTransform.rotation}deg)`,
                                             width: photo.width ? `${photo.width}px` : 'auto',
                                             height: photo.height ? `${photo.height}px` : 'auto',
                                         }}
@@ -197,7 +230,7 @@ export function PhotoCard({
                                     />
                                 </div>
                             ) : (
-                                // 没有编辑信息，使用默认的 object-cover
+                                // 没有任何变换，使用默认的 object-cover
                                 <img
                                     src={photo.url}
                                     alt="照片"

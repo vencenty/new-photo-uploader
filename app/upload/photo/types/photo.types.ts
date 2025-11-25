@@ -14,6 +14,7 @@ export interface Photo {
     width?: number; // 图片宽度（像素）
     height?: number; // 图片高度（像素）
     transform?: PhotoTransform; // 编辑后的变换信息
+    autoRotated?: boolean; // 是否自动旋转（横图转竖图）
 }
 
 export type PhotoSize = '5寸' | '6寸' | '7寸' | '正方形';

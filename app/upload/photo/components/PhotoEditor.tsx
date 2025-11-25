@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Photo, StyleType } from '../types/photo.types';
+import { Photo, StyleType, BLEED_AREA_PERCENT, WHITE_MARGIN_PERCENT } from '../types/photo.types';
 import { calculatePhotoScale } from '../utils/photoTransform';
 
 interface PhotoEditorProps {
@@ -460,7 +460,10 @@ export function PhotoEditor({
                     >
                         {styleType === 'white_margin' ? (
                             // 留白样式 - 外层等比白边（约4mm）+ 内层 object-contain
-                            <div className="absolute inset-0 p-[5%]">
+                            <div 
+                                className="absolute inset-0"
+                                style={{ padding: `${WHITE_MARGIN_PERCENT}%` }}
+                            >
                                 <div 
                                     ref={containerRef}
                                     className="relative w-full h-full overflow-hidden"
@@ -530,8 +533,9 @@ export function PhotoEditor({
                                 <div className="absolute inset-0 pointer-events-none">
                                     {/* 上边出血区域 */}
                                     <div 
-                                        className="absolute top-0 left-0 right-0 h-[5%]"
+                                        className="absolute top-0 left-0 right-0"
                                         style={{
+                                            height: `${BLEED_AREA_PERCENT}%`,
                                             background: `repeating-linear-gradient(
                                                 -45deg,
                                                 transparent,
@@ -543,8 +547,9 @@ export function PhotoEditor({
                                     />
                                     {/* 下边出血区域 */}
                                     <div 
-                                        className="absolute bottom-0 left-0 right-0 h-[5%]"
+                                        className="absolute bottom-0 left-0 right-0"
                                         style={{
+                                            height: `${BLEED_AREA_PERCENT}%`,
                                             background: `repeating-linear-gradient(
                                                 -45deg,
                                                 transparent,
@@ -556,8 +561,11 @@ export function PhotoEditor({
                                     />
                                     {/* 左边出血区域 */}
                                     <div 
-                                        className="absolute top-[5%] bottom-[5%] left-0 w-[5%]"
+                                        className="absolute left-0"
                                         style={{
+                                            top: `${BLEED_AREA_PERCENT}%`,
+                                            bottom: `${BLEED_AREA_PERCENT}%`,
+                                            width: `${BLEED_AREA_PERCENT}%`,
                                             background: `repeating-linear-gradient(
                                                 -45deg,
                                                 transparent,
@@ -569,8 +577,11 @@ export function PhotoEditor({
                                     />
                                     {/* 右边出血区域 */}
                                     <div 
-                                        className="absolute top-[5%] bottom-[5%] right-0 w-[5%]"
+                                        className="absolute right-0"
                                         style={{
+                                            top: `${BLEED_AREA_PERCENT}%`,
+                                            bottom: `${BLEED_AREA_PERCENT}%`,
+                                            width: `${BLEED_AREA_PERCENT}%`,
                                             background: `repeating-linear-gradient(
                                                 -45deg,
                                                 transparent,
@@ -584,10 +595,10 @@ export function PhotoEditor({
                                     <div 
                                         className="absolute border border-dashed border-red-400"
                                         style={{
-                                            top: '5%',
-                                            left: '5%',
-                                            right: '5%',
-                                            bottom: '5%',
+                                            top: `${BLEED_AREA_PERCENT}%`,
+                                            left: `${BLEED_AREA_PERCENT}%`,
+                                            right: `${BLEED_AREA_PERCENT}%`,
+                                            bottom: `${BLEED_AREA_PERCENT}%`,
                                         }}
                                     />
                                 </div>

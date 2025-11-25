@@ -1,3 +1,21 @@
+// ==================== 配置常量 ====================
+
+/**
+ * 出血线区域百分比（满版样式）
+ * 用于显示出血警告区域，提示用户该区域内容可能被裁切
+ * 值范围：0-50，单位：%
+ */
+export const BLEED_AREA_PERCENT = 3;
+
+/**
+ * 留白边框百分比（留白样式）
+ * 用于在照片四周添加白色边框
+ * 值范围：0-50，单位：%
+ */
+export const WHITE_MARGIN_PERCENT = 5;
+
+// ==================== 类型定义 ====================
+
 export interface PhotoTransform {
     position: { x: number; y: number };
     scale: number;

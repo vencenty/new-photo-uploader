@@ -1,6 +1,6 @@
 'use client';
 
-import { Photo, StyleType } from '../types/photo.types';
+import { Photo, StyleType, WHITE_MARGIN_PERCENT } from '../types/photo.types';
 import { useRef, useEffect, useState } from 'react';
 import { scaleTransform, calculateDefaultTransform } from '../utils/photoTransform';
 
@@ -93,7 +93,10 @@ export function PhotoCard({
             >
                 {styleType === 'white_margin' ? (
                     // 留白样式 - 添加等比白边（与 PhotoEditor 保持相同比例）
-                    <div className="absolute inset-0 p-[5%] flex items-center justify-center">
+                    <div 
+                        className="absolute inset-0 flex items-center justify-center"
+                        style={{ padding: `${WHITE_MARGIN_PERCENT}%` }}
+                    >
                         {/* 删除按钮 */}
                         <button
                             onClick={onRemove}

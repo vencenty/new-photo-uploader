@@ -45,14 +45,18 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
         // 获取旋转后的边界框
         const rotatedBounds = getRotatedBounds(photo.width, photo.height, rot);
         
-        // 计算需要的最小缩放比例，确保旋转后的图片能覆盖容器
+        // 计算需要的最小缩放比例
         const scaleX = containerWidth / rotatedBounds.width;
         const scaleY = containerHeight / rotatedBounds.height;
         
-        return Math.max(scaleX, scaleY);
+        // 满版：使用 Math.max 确保图片能覆盖容器（可能裁切）
+        // 留白：使用 Math.min 确保图片完全显示在容器内（object-contain）
+        return styleType === 'white_margin' 
+            ? Math.min(scaleX, scaleY)
+            : Math.max(scaleX, scaleY);
     };
 
-    // 限制位置，防止出现白边
+    // 限制位置
     const constrainPosition = (pos: { x: number; y: number }, currentScale: number, currentRotation: number) => {
         if (!photo.width || !photo.height || !containerRef.current) return pos;
 
@@ -66,17 +70,31 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
         // 获取旋转后的边界
         const rotatedBounds = getRotatedBounds(scaledWidth, scaledHeight, currentRotation);
 
-        // 计算最大允许的偏移量
-        const maxOffsetX = Math.max(0, (rotatedBounds.width - containerWidth) / 2);
-        const maxOffsetY = Math.max(0, (rotatedBounds.height - containerHeight) / 2);
+        if (styleType === 'white_margin') {
+            // 留白模式：确保照片不会移出容器边界
+            // 照片可能比容器小，所以限制照片不能完全移出视野
+            const maxOffsetX = Math.max(0, (rotatedBounds.width - containerWidth) / 2);
+            const maxOffsetY = Math.max(0, (rotatedBounds.height - containerHeight) / 2);
+            
+            // 如果照片比容器小，限制它不能完全移出边界
+            // 如果照片比容器大，允许移动但不能露出白边
+            return {
+                x: Math.max(-maxOffsetX, Math.min(maxOffsetX, pos.x)),
+                y: Math.max(-maxOffsetY, Math.min(maxOffsetY, pos.y)),
+            };
+        } else {
+            // 满版模式：防止出现白边，照片必须覆盖容器
+            const maxOffsetX = Math.max(0, (rotatedBounds.width - containerWidth) / 2);
+            const maxOffsetY = Math.max(0, (rotatedBounds.height - containerHeight) / 2);
 
-        return {
-            x: Math.max(-maxOffsetX, Math.min(maxOffsetX, pos.x)),
-            y: Math.max(-maxOffsetY, Math.min(maxOffsetY, pos.y)),
-        };
+            return {
+                x: Math.max(-maxOffsetX, Math.min(maxOffsetX, pos.x)),
+                y: Math.max(-maxOffsetY, Math.min(maxOffsetY, pos.y)),
+            };
+        }
     };
 
-    // 初始化图片尺寸，让它填满容器（类似 object-cover）
+    // 初始化图片尺寸
     useEffect(() => {
         if (!photo.width || !photo.height || !containerRef.current) return;
 
@@ -88,14 +106,26 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
         // 容器宽高比
         const containerAspectRatio = containerWidth / containerHeight;
 
-        // 类似 object-cover 的逻辑：选择较大的缩放比例，确保填满容器
+        // 根据样式类型选择缩放逻辑
         let newScale: number;
-        if (imageAspectRatio > containerAspectRatio) {
-            // 图片更宽，按高度填满
-            newScale = containerHeight / photo.height;
+        if (styleType === 'white_margin') {
+            // 留白模式：object-contain 逻辑，选择较小的缩放比例，确保完整显示
+            if (imageAspectRatio > containerAspectRatio) {
+                // 图片更宽，按宽度缩放
+                newScale = containerWidth / photo.width;
+            } else {
+                // 图片更高或相等，按高度缩放
+                newScale = containerHeight / photo.height;
+            }
         } else {
-            // 图片更高或相等，按宽度填满
-            newScale = containerWidth / photo.width;
+            // 满版模式：object-cover 逻辑，选择较大的缩放比例，确保填满容器
+            if (imageAspectRatio > containerAspectRatio) {
+                // 图片更宽，按高度填满
+                newScale = containerHeight / photo.height;
+            } else {
+                // 图片更高或相等，按宽度填满
+                newScale = containerWidth / photo.width;
+            }
         }
 
         // 如果有保存的变换信息，使用保存的值；否则使用默认值
@@ -121,7 +151,7 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
             setPosition({ x: 0, y: 0 });
             setRotation(0);
         }
-    }, [photo, aspectRatio]);
+    }, [photo, aspectRatio, styleType]);
 
     // 计算两个触摸点之间的距离
     const getTouchDistance = (touches: React.TouchList) => {
@@ -296,11 +326,11 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
                         }}
                     >
                         {styleType === 'white_margin' ? (
-                            // 留白样式 - 添加白边，图片在内部区域显示
-                            <div className="absolute inset-0 p-[8%] flex items-center justify-center">
+                            // 留白样式 - 外层固定白边 + 内层 object-contain
+                            <div className="absolute inset-0 p-[8%]">
                                 <div 
                                     ref={containerRef}
-                                    className="relative w-full h-full bg-gray-50 overflow-hidden"
+                                    className="relative w-full h-full overflow-hidden"
                                 >
                                     {/* 可拖动的图片 */}
                                     <div 

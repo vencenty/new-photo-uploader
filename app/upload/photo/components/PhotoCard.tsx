@@ -26,7 +26,7 @@ export function PhotoCard({
     return (
         <div className="flex-1 relative">
             <div
-                className="bg-white rounded-lg overflow-hidden shadow-sm relative"
+                className="bg-white overflow-hidden shadow-sm relative"
                 style={containerStyle}
             >
                 <div className="absolute inset-0">
@@ -55,7 +55,7 @@ export function PhotoCard({
 
                         {/* 只对未确认且有警告的照片显示警告遮罩层 */}
                         {!isConfirmed && warningMessage && (
-                            <div className="flex flex-col items-center justify-center absolute inset-0 bg-black/40 rounded-xl">
+                            <div className="flex flex-col items-center justify-center absolute inset-0 bg-black/40">
                                 {/* 动态提示文字 */}
                                 <div className="text-lg font-medium text-red-100 mb-2">
                                     {warningMessage}
@@ -99,6 +99,7 @@ export function PhotoCard({
         </div>
     );
 }
+
 
 
 

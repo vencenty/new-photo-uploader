@@ -2,6 +2,7 @@
 
 import { Photo, StyleType } from '../types/photo.types';
 import { useRef, useEffect, useState } from 'react';
+import { scaleTransform, calculateDefaultTransform } from '../utils/photoTransform';
 
 interface PhotoCardProps {
     photo: Photo;
@@ -65,49 +66,18 @@ export function PhotoCard({
             }
 
             if (photo.transform) {
-                // 如果有编辑信息，按比例缩放
-                if (!photo.transform.containerWidth || !photo.transform.containerHeight) {
-                    setScaledTransform(null);
-                    return;
-                }
-
-                const scaleRatio = currentWidth / photo.transform.containerWidth;
-
-                setScaledTransform({
-                    position: {
-                        x: photo.transform.position.x * scaleRatio,
-                        y: photo.transform.position.y * scaleRatio,
-                    },
-                    scale: photo.transform.scale * scaleRatio,
-                    rotation: photo.transform.rotation,
-                });
-            } else if (photo.autoRotated && photo.width && photo.height) {
-                // 自动旋转的照片，手动计算缩放
-                const actualWidth = photo.height; // 旋转后宽高互换
-                const actualHeight = photo.width;
-                const imageAspectRatio = actualWidth / actualHeight;
-                const containerAspectRatio = currentWidth / currentHeight;
-
-                let calculatedScale: number;
-                if (styleType === 'white_margin') {
-                    // 留白模式：object-contain
-                    calculatedScale = imageAspectRatio > containerAspectRatio
-                        ? currentWidth / actualWidth
-                        : currentHeight / actualHeight;
-                } else {
-                    // 满版模式：object-cover
-                    calculatedScale = imageAspectRatio > containerAspectRatio
-                        ? currentHeight / actualHeight
-                        : currentWidth / actualWidth;
-                }
-
-                setScaledTransform({
-                    position: { x: 0, y: 0 },
-                    scale: calculatedScale,
-                    rotation: 90,
-                });
+                // 如果有编辑信息，按比例缩放（使用公共函数）
+                const scaled = scaleTransform(photo, currentWidth);
+                setScaledTransform(scaled);
             } else {
-                setScaledTransform(null);
+                // 使用默认变换（未编辑的照片，包括自动旋转）
+                const defaultTransform = calculateDefaultTransform(
+                    photo,
+                    currentWidth,
+                    currentHeight,
+                    styleType
+                );
+                setScaledTransform(defaultTransform);
             }
         };
 

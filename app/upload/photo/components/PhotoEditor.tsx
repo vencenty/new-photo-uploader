@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Photo, StyleType } from '../types/photo.types';
+import { calculatePhotoScale } from '../utils/photoTransform';
 
 interface PhotoEditorProps {
     photo: Photo;
@@ -100,43 +101,10 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
 
         const containerWidth = containerRef.current.offsetWidth;
         const containerHeight = containerRef.current.offsetHeight;
-        
-        // 如果有保存的 transform 或者是自动旋转的图片，需要考虑旋转
-        const willBeRotated = photo.autoRotated && !photo.transform;
-        
-        // 根据是否旋转，调整图片的实际宽高
-        const actualWidth = willBeRotated ? photo.height : photo.width;
-        const actualHeight = willBeRotated ? photo.width : photo.height;
-        
-        // 计算图片宽高比（使用旋转后的实际宽高）
-        const imageAspectRatio = actualWidth / actualHeight;
-        // 容器宽高比
-        const containerAspectRatio = containerWidth / containerHeight;
-
-        // 根据样式类型选择缩放逻辑
-        let newScale: number;
-        if (styleType === 'white_margin') {
-            // 留白模式：object-contain 逻辑，选择较小的缩放比例，确保完整显示
-            if (imageAspectRatio > containerAspectRatio) {
-                // 图片更宽，按宽度缩放
-                newScale = containerWidth / actualWidth;
-            } else {
-                // 图片更高或相等，按高度缩放
-                newScale = containerHeight / actualHeight;
-            }
-        } else {
-            // 满版模式：object-cover 逻辑，选择较大的缩放比例，确保填满容器
-            if (imageAspectRatio > containerAspectRatio) {
-                // 图片更宽，按高度填满
-                newScale = containerHeight / actualHeight;
-            } else {
-                // 图片更高或相等，按宽度填满
-                newScale = containerWidth / actualWidth;
-            }
-        }
 
         // 如果有保存的变换信息，使用保存的值；否则使用默认值
         if (photo.transform) {
+            // 使用保存的变换
             const rot = photo.transform.rotation;
             const minS = calculateMinScale(rot);
             setMinScale(minS);
@@ -149,10 +117,27 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
             // 限制位置
             const constrainedPos = constrainPosition(photo.transform.position, safeScale, rot);
             setPosition(constrainedPos);
-            setInitialScale(newScale);
+            
+            // 计算初始缩放用于重置
+            const initialScale = calculatePhotoScale(
+                photo,
+                containerWidth,
+                containerHeight,
+                styleType,
+                rot
+            );
+            setInitialScale(initialScale);
         } else {
-            // 检查是否需要自动旋转（横图转竖图）
+            // 使用公共函数计算初始缩放
             const initialRotation = photo.autoRotated ? 90 : 0;
+            const newScale = calculatePhotoScale(
+                photo,
+                containerWidth,
+                containerHeight,
+                styleType,
+                initialRotation
+            );
+            
             const minS = calculateMinScale(initialRotation);
             setMinScale(minS);
             setScale(newScale);

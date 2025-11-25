@@ -17,8 +17,63 @@ export function PhotoEditor({ photo, aspectRatio, onClose, onSave }: PhotoEditor
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const [rotation, setRotation] = useState(0);
     const [initialScale, setInitialScale] = useState(1);
+    const [minScale, setMinScale] = useState(1);
+    const [touchStartDistance, setTouchStartDistance] = useState(0);
+    const [touchStartScale, setTouchStartScale] = useState(1);
     const imageRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+
+    // 计算旋转后的边界框尺寸
+    const getRotatedBounds = (width: number, height: number, angle: number) => {
+        const rad = (angle * Math.PI) / 180;
+        const cos = Math.abs(Math.cos(rad));
+        const sin = Math.abs(Math.sin(rad));
+        return {
+            width: width * cos + height * sin,
+            height: width * sin + height * cos,
+        };
+    };
+
+    // 计算在给定缩放和旋转下的最小缩放比例
+    const calculateMinScale = (rot: number) => {
+        if (!photo.width || !photo.height || !containerRef.current) return 1;
+
+        const containerWidth = containerRef.current.offsetWidth;
+        const containerHeight = containerRef.current.offsetHeight;
+
+        // 获取旋转后的边界框
+        const rotatedBounds = getRotatedBounds(photo.width, photo.height, rot);
+        
+        // 计算需要的最小缩放比例，确保旋转后的图片能覆盖容器
+        const scaleX = containerWidth / rotatedBounds.width;
+        const scaleY = containerHeight / rotatedBounds.height;
+        
+        return Math.max(scaleX, scaleY);
+    };
+
+    // 限制位置，防止出现白边
+    const constrainPosition = (pos: { x: number; y: number }, currentScale: number, currentRotation: number) => {
+        if (!photo.width || !photo.height || !containerRef.current) return pos;
+
+        const containerWidth = containerRef.current.offsetWidth;
+        const containerHeight = containerRef.current.offsetHeight;
+
+        // 计算缩放后的图片尺寸
+        const scaledWidth = photo.width * currentScale;
+        const scaledHeight = photo.height * currentScale;
+
+        // 获取旋转后的边界
+        const rotatedBounds = getRotatedBounds(scaledWidth, scaledHeight, currentRotation);
+
+        // 计算最大允许的偏移量
+        const maxOffsetX = Math.max(0, (rotatedBounds.width - containerWidth) / 2);
+        const maxOffsetY = Math.max(0, (rotatedBounds.height - containerHeight) / 2);
+
+        return {
+            x: Math.max(-maxOffsetX, Math.min(maxOffsetX, pos.x)),
+            y: Math.max(-maxOffsetY, Math.min(maxOffsetY, pos.y)),
+        };
+    };
 
     // 初始化图片尺寸，让它填满容器（类似 object-cover）
     useEffect(() => {
@@ -44,11 +99,22 @@ export function PhotoEditor({ photo, aspectRatio, onClose, onSave }: PhotoEditor
 
         // 如果有保存的变换信息，使用保存的值；否则使用默认值
         if (photo.transform) {
-            setPosition(photo.transform.position);
-            setScale(photo.transform.scale);
-            setRotation(photo.transform.rotation);
+            const rot = photo.transform.rotation;
+            const minS = calculateMinScale(rot);
+            setMinScale(minS);
+            
+            // 确保缩放不小于最小值
+            const safeScale = Math.max(minS, photo.transform.scale);
+            setScale(safeScale);
+            setRotation(rot);
+            
+            // 限制位置
+            const constrainedPos = constrainPosition(photo.transform.position, safeScale, rot);
+            setPosition(constrainedPos);
             setInitialScale(newScale);
         } else {
+            const minS = calculateMinScale(0);
+            setMinScale(minS);
             setScale(newScale);
             setInitialScale(newScale);
             setPosition({ x: 0, y: 0 });
@@ -56,25 +122,59 @@ export function PhotoEditor({ photo, aspectRatio, onClose, onSave }: PhotoEditor
         }
     }, [photo, aspectRatio]);
 
+    // 计算两个触摸点之间的距离
+    const getTouchDistance = (touches: React.TouchList) => {
+        if (touches.length < 2) return 0;
+        const dx = touches[0].clientX - touches[1].clientX;
+        const dy = touches[0].clientY - touches[1].clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    };
+
     const handleTouchStart = (e: React.TouchEvent) => {
-        setIsDragging(true);
-        setDragStart({
-            x: e.touches[0].clientX - position.x,
-            y: e.touches[0].clientY - position.y
-        });
+        if (e.touches.length === 2) {
+            // 双指缩放开始
+            const distance = getTouchDistance(e.touches);
+            setTouchStartDistance(distance);
+            setTouchStartScale(scale);
+            setIsDragging(false);
+        } else if (e.touches.length === 1) {
+            // 单指拖拽
+            setIsDragging(true);
+            setDragStart({
+                x: e.touches[0].clientX - position.x,
+                y: e.touches[0].clientY - position.y
+            });
+        }
     };
 
     const handleTouchMove = (e: React.TouchEvent) => {
-        if (!isDragging) return;
         e.preventDefault();
-        setPosition({
-            x: e.touches[0].clientX - dragStart.x,
-            y: e.touches[0].clientY - dragStart.y
-        });
+        
+        if (e.touches.length === 2 && touchStartDistance > 0) {
+            // 双指缩放
+            const distance = getTouchDistance(e.touches);
+            const scaleChange = distance / touchStartDistance;
+            const newScale = Math.max(minScale, touchStartScale * scaleChange);
+            
+            setScale(newScale);
+            
+            // 缩放后重新约束位置
+            const constrainedPos = constrainPosition(position, newScale, rotation);
+            setPosition(constrainedPos);
+        } else if (isDragging && e.touches.length === 1) {
+            // 单指拖拽
+            const newPosition = {
+                x: e.touches[0].clientX - dragStart.x,
+                y: e.touches[0].clientY - dragStart.y
+            };
+            const constrainedPos = constrainPosition(newPosition, scale, rotation);
+            setPosition(constrainedPos);
+        }
     };
 
     const handleTouchEnd = () => {
         setIsDragging(false);
+        setTouchStartDistance(0);
     };
 
     const handleMouseDown = (e: React.MouseEvent) => {
@@ -87,24 +187,54 @@ export function PhotoEditor({ photo, aspectRatio, onClose, onSave }: PhotoEditor
 
     const handleMouseMove = (e: React.MouseEvent) => {
         if (!isDragging) return;
-        setPosition({
+        const newPosition = {
             x: e.clientX - dragStart.x,
             y: e.clientY - dragStart.y
-        });
+        };
+        const constrainedPos = constrainPosition(newPosition, scale, rotation);
+        setPosition(constrainedPos);
     };
 
     const handleMouseUp = () => {
         setIsDragging(false);
     };
 
+    // 滚轮缩放
+    const handleWheel = (e: React.WheelEvent) => {
+        e.preventDefault();
+        const delta = -e.deltaY / 1000;
+        const newScale = Math.max(minScale, Math.min(scale * (1 + delta), scale * 3));
+        
+        setScale(newScale);
+        
+        // 缩放后重新约束位置
+        const constrainedPos = constrainPosition(position, newScale, rotation);
+        setPosition(constrainedPos);
+    };
+
     const handleRotate = () => {
-        setRotation((prev) => (prev + 90) % 360);
+        const newRotation = (rotation + 90) % 360;
+        setRotation(newRotation);
+        
+        // 重新计算最小缩放比例
+        const newMinScale = calculateMinScale(newRotation);
+        setMinScale(newMinScale);
+        
+        // 如果当前缩放小于新的最小缩放，调整它
+        const newScale = Math.max(scale, newMinScale);
+        setScale(newScale);
+        
+        // 重新约束位置
+        const constrainedPos = constrainPosition(position, newScale, newRotation);
+        setPosition(constrainedPos);
     };
 
     const handleReset = () => {
         setScale(initialScale);
         setPosition({ x: 0, y: 0 });
         setRotation(0);
+        const newMinScale = calculateMinScale(0);
+        setMinScale(newMinScale);
     };
 
     const handleSave = () => {
@@ -169,6 +299,7 @@ export function PhotoEditor({ photo, aspectRatio, onClose, onSave }: PhotoEditor
                             onMouseMove={handleMouseMove}
                             onMouseUp={handleMouseUp}
                             onMouseLeave={handleMouseUp}
+                            onWheel={handleWheel}
                             onTouchStart={handleTouchStart}
                             onTouchMove={handleTouchMove}
                             onTouchEnd={handleTouchEnd}

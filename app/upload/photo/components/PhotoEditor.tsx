@@ -1,18 +1,31 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Photo, StyleType } from '../types/photo.types';
 import { calculatePhotoScale } from '../utils/photoTransform';
 
 interface PhotoEditorProps {
-    photo: Photo;
+    photos: Photo[];
+    currentIndex: number;
     aspectRatio: number;
     styleType: StyleType;
     onClose: () => void;
     onSave: (photo: Photo) => void;
+    onNavigate: (index: number) => void;
+    onReplace: (oldPhoto: Photo, newPhoto: Photo) => void;
 }
 
-export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: PhotoEditorProps) {
+export function PhotoEditor({ 
+    photos, 
+    currentIndex, 
+    aspectRatio, 
+    styleType, 
+    onClose, 
+    onSave, 
+    onNavigate,
+    onReplace 
+}: PhotoEditorProps) {
+    const photo = photos[currentIndex];
     const [scale, setScale] = useState(1);
     const [position, setPosition] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
@@ -24,6 +37,10 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
     const [touchStartScale, setTouchStartScale] = useState(1);
     const imageRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    
+    // 标记当前照片是否有未保存的修改
+    const [hasChanges, setHasChanges] = useState(false);
 
     // 计算旋转后的边界框尺寸
     const getRotatedBounds = (width: number, height: number, angle: number) => {
@@ -37,8 +54,8 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
     };
 
     // 计算在给定缩放和旋转下的最小缩放比例
-    const calculateMinScale = (rot: number) => {
-        if (!photo.width || !photo.height || !containerRef.current) return 1;
+    const calculateMinScale = useCallback((rot: number) => {
+        if (!photo?.width || !photo?.height || !containerRef.current) return 1;
 
         const containerWidth = containerRef.current.offsetWidth;
         const containerHeight = containerRef.current.offsetHeight;
@@ -55,11 +72,11 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
         return styleType === 'white_margin' 
             ? Math.min(scaleX, scaleY)
             : Math.max(scaleX, scaleY);
-    };
+    }, [photo, styleType]);
 
     // 限制位置
-    const constrainPosition = (pos: { x: number; y: number }, currentScale: number, currentRotation: number) => {
-        if (!photo.width || !photo.height || !containerRef.current) return pos;
+    const constrainPosition = useCallback((pos: { x: number; y: number }, currentScale: number, currentRotation: number) => {
+        if (!photo?.width || !photo?.height || !containerRef.current) return pos;
 
         const containerWidth = containerRef.current.offsetWidth;
         const containerHeight = containerRef.current.offsetHeight;
@@ -73,12 +90,9 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
 
         if (styleType === 'white_margin') {
             // 留白模式：确保照片不会移出容器边界
-            // 照片可能比容器小，所以限制照片不能完全移出视野
             const maxOffsetX = Math.max(0, (rotatedBounds.width - containerWidth) / 2);
             const maxOffsetY = Math.max(0, (rotatedBounds.height - containerHeight) / 2);
             
-            // 如果照片比容器小，限制它不能完全移出边界
-            // 如果照片比容器大，允许移动但不能露出白边
             return {
                 x: Math.max(-maxOffsetX, Math.min(maxOffsetX, pos.x)),
                 y: Math.max(-maxOffsetY, Math.min(maxOffsetY, pos.y)),
@@ -93,11 +107,29 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
                 y: Math.max(-maxOffsetY, Math.min(maxOffsetY, pos.y)),
             };
         }
-    };
+    }, [photo, styleType]);
+
+    // 保存当前照片的编辑状态
+    const saveCurrentPhoto = useCallback(() => {
+        if (!containerRef.current || !photo) return;
+        
+        const updatedPhoto = {
+            ...photo,
+            transform: {
+                position,
+                scale,
+                rotation,
+                containerWidth: containerRef.current.offsetWidth,
+                containerHeight: containerRef.current.offsetHeight,
+            },
+        };
+        onSave(updatedPhoto);
+        setHasChanges(false);
+    }, [photo, position, scale, rotation, onSave]);
 
     // 初始化图片尺寸
     useEffect(() => {
-        if (!photo.width || !photo.height || !containerRef.current) return;
+        if (!photo?.width || !photo?.height || !containerRef.current) return;
 
         const containerWidth = containerRef.current.offsetWidth;
         const containerHeight = containerRef.current.offsetHeight;
@@ -119,14 +151,14 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
             setPosition(constrainedPos);
             
             // 计算初始缩放用于重置
-            const initialScale = calculatePhotoScale(
+            const initScale = calculatePhotoScale(
                 photo,
                 containerWidth,
                 containerHeight,
                 styleType,
                 rot
             );
-            setInitialScale(initialScale);
+            setInitialScale(initScale);
         } else {
             // 使用公共函数计算初始缩放
             const initialRotation = photo.autoRotated ? 90 : 0;
@@ -145,7 +177,8 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
             setPosition({ x: 0, y: 0 });
             setRotation(initialRotation);
         }
-    }, [photo, aspectRatio, styleType]);
+        setHasChanges(false);
+    }, [photo, aspectRatio, styleType, calculateMinScale, constrainPosition]);
 
     // 计算两个触摸点之间的距离
     const getTouchDistance = (touches: React.TouchList) => {
@@ -182,6 +215,7 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
             const newScale = Math.max(minScale, touchStartScale * scaleChange);
             
             setScale(newScale);
+            setHasChanges(true);
             
             // 缩放后重新约束位置
             const constrainedPos = constrainPosition(position, newScale, rotation);
@@ -194,6 +228,7 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
             };
             const constrainedPos = constrainPosition(newPosition, scale, rotation);
             setPosition(constrainedPos);
+            setHasChanges(true);
         }
     };
 
@@ -218,6 +253,7 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
         };
         const constrainedPos = constrainPosition(newPosition, scale, rotation);
         setPosition(constrainedPos);
+        setHasChanges(true);
     };
 
     const handleMouseUp = () => {
@@ -231,6 +267,7 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
         const newScale = Math.max(minScale, Math.min(scale * (1 + delta), scale * 3));
         
         setScale(newScale);
+        setHasChanges(true);
         
         // 缩放后重新约束位置
         const constrainedPos = constrainPosition(position, newScale, rotation);
@@ -240,6 +277,7 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
     const handleRotate = () => {
         const newRotation = (rotation + 90) % 360;
         setRotation(newRotation);
+        setHasChanges(true);
         
         // 重新计算最小缩放比例
         const newMinScale = calculateMinScale(newRotation);
@@ -257,29 +295,113 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
     const handleReset = () => {
         setScale(initialScale);
         setPosition({ x: 0, y: 0 });
-        setRotation(0);
-        const newMinScale = calculateMinScale(0);
+        setRotation(photo?.autoRotated ? 90 : 0);
+        const newMinScale = calculateMinScale(photo?.autoRotated ? 90 : 0);
         setMinScale(newMinScale);
+        setHasChanges(true);
     };
 
     const handleSave = () => {
-        if (!containerRef.current) return;
-        
-        const updatedPhoto = {
-            ...photo,
-            transform: {
-                position,
-                scale,
-                rotation,
-                containerWidth: containerRef.current.offsetWidth,
-                containerHeight: containerRef.current.offsetHeight,
-            },
-        };
-        onSave(updatedPhoto);
+        saveCurrentPhoto();
+        onClose();
     };
+
+    // 导航到上一张/下一张照片
+    const handleNavigate = (direction: 'prev' | 'next') => {
+        // 先自动保存当前照片的修改
+        if (hasChanges) {
+            saveCurrentPhoto();
+        }
+        
+        const newIndex = direction === 'prev' ? currentIndex - 1 : currentIndex + 1;
+        if (newIndex >= 0 && newIndex < photos.length) {
+            onNavigate(newIndex);
+        }
+    };
+
+    // 处理替换图片
+    const handleReplaceClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
+        if (!file.type.startsWith('image/')) {
+            alert('请选择图片文件');
+            return;
+        }
+
+        if (file.size > MAX_FILE_SIZE) {
+            alert('图片大小不能超过50MB');
+            return;
+        }
+
+        try {
+            const imageUrl = URL.createObjectURL(file);
+
+            const { width, height } = await new Promise<{
+                width: number;
+                height: number;
+            }>((resolve, reject) => {
+                const img = document.createElement('img');
+                img.onload = () => {
+                    resolve({ width: img.width, height: img.height });
+                };
+                img.onerror = () => reject(new Error('图片加载失败'));
+                img.src = imageUrl;
+            });
+
+            // 检测是否为横图（宽度大于高度）
+            const isLandscape = width > height;
+
+            // 创建新的 Photo 对象，保留原照片的 id 和数量
+            const newPhoto: Photo = {
+                id: photo.id, // 保留原 ID
+                url: imageUrl,
+                quantity: photo.quantity, // 保留原数量
+                fileSize: file.size,
+                width,
+                height,
+                autoRotated: isLandscape, // 自动应用横图旋转
+                // 不传递 transform，让新图片重新计算
+            };
+
+            // 释放旧的 blob URL
+            if (photo.url.startsWith('blob:')) {
+                URL.revokeObjectURL(photo.url);
+            }
+
+            // 调用替换回调
+            onReplace(photo, newPhoto);
+
+        } catch (error) {
+            console.error('图片加载错误:', error);
+            alert('图片加载失败，请重试');
+        }
+
+        // 清空 input 以便再次选择相同文件
+        event.target.value = '';
+    };
+
+    if (!photo) {
+        return null;
+    }
 
     return (
         <div className="fixed inset-0 bg-white z-50 flex flex-col">
+            {/* 隐藏的文件输入 */}
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+            />
+
             {/* 顶部导航栏 */}
             <header className="bg-white border-b">
                 <div className="flex items-center justify-between px-4 py-3">
@@ -390,15 +512,33 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
                         )}
                     </div>
 
-                    {/* 图片序号 - TODO: 实现切换功能 */}
-                    <div className="flex items-center justify-center gap-2 mt-4">
-                        <button className="text-gray-400">
+                    {/* 图片序号和翻页按钮 */}
+                    <div className="flex items-center justify-center gap-4 mt-4">
+                        <button 
+                            className={`p-2 rounded-full transition-colors ${
+                                currentIndex > 0 
+                                    ? 'text-gray-600 hover:bg-gray-200 active:bg-gray-300' 
+                                    : 'text-gray-300 cursor-not-allowed'
+                            }`}
+                            onClick={() => handleNavigate('prev')}
+                            disabled={currentIndex === 0}
+                        >
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                             </svg>
                         </button>
-                        <span className="text-base text-gray-600">2/12</span>
-                        <button className="text-gray-400">
+                        <span className="text-base text-gray-600 min-w-[60px] text-center">
+                            {currentIndex + 1}/{photos.length}
+                        </span>
+                        <button 
+                            className={`p-2 rounded-full transition-colors ${
+                                currentIndex < photos.length - 1 
+                                    ? 'text-gray-600 hover:bg-gray-200 active:bg-gray-300' 
+                                    : 'text-gray-300 cursor-not-allowed'
+                            }`}
+                            onClick={() => handleNavigate('next')}
+                            disabled={currentIndex === photos.length - 1}
+                        >
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                             </svg>
@@ -419,7 +559,10 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
                     </button>
 
                     {/* 换图 */}
-                    <button className="flex flex-col items-center gap-1 text-gray-600">
+                    <button 
+                        className="flex flex-col items-center gap-1 text-gray-600 hover:text-orange-500 transition-colors"
+                        onClick={handleReplaceClick}
+                    >
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
@@ -427,7 +570,7 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
                     </button>
 
                     {/* 裁剪 */}
-                    <button className="flex flex-col items-center gap-1 text-gray-600">
+                    <button className="flex flex-col items-center gap-1 text-gray-400">
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
                         </svg>
@@ -436,7 +579,7 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
 
                     {/* 旋转 */}
                     <button 
-                        className="flex flex-col items-center gap-1 text-gray-600"
+                        className="flex flex-col items-center gap-1 text-gray-600 hover:text-orange-500 transition-colors"
                         onClick={handleRotate}
                     >
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -447,7 +590,7 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
 
                     {/* 重置 */}
                     <button 
-                        className="flex flex-col items-center gap-1 text-gray-600"
+                        className="flex flex-col items-center gap-1 text-gray-600 hover:text-orange-500 transition-colors"
                         onClick={handleReset}
                     >
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -460,4 +603,3 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
         </div>
     );
 }
-

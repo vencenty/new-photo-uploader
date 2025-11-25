@@ -14,7 +14,7 @@ export default function PhotoPrintPage() {
     const [selectedStyle, setSelectedStyle] = useState<StyleType>('full_bleed');
     const [showSizeSelector, setShowSizeSelector] = useState(false);
     const [confirmedPhotos, setConfirmedPhotos] = useState<Set<string>>(new Set());
-    const [editingPhoto, setEditingPhoto] = useState<Photo | null>(null);
+    const [editingPhotoIndex, setEditingPhotoIndex] = useState<number | null>(null);
 
     const PRICE_PER_PHOTO = 3.5;
     const SHIPPING_FEE = 6;
@@ -256,7 +256,12 @@ export default function PhotoPrintPage() {
                                                 handleQuantityChange(photo.id, delta)
                                             }
                                             onConfirm={() => handleConfirmPhoto(photo.id)}
-                                            onEdit={() => setEditingPhoto(photo)}
+                                            onEdit={() => {
+                                                const index = photos.findIndex(p => p.id === photo.id);
+                                                if (index !== -1) {
+                                                    setEditingPhotoIndex(index);
+                                                }
+                                            }}
                                         />
                                     );
                                 });
@@ -331,18 +336,27 @@ export default function PhotoPrintPage() {
             )}
 
             {/* 照片编辑器弹窗 */}
-            {editingPhoto && (
+            {editingPhotoIndex !== null && photos[editingPhotoIndex] && (
                 <PhotoEditor
-                    photo={editingPhoto}
+                    photos={photos}
+                    currentIndex={editingPhotoIndex}
                     aspectRatio={currentAspectRatio}
                     styleType={selectedStyle}
-                    onClose={() => setEditingPhoto(null)}
+                    onClose={() => setEditingPhotoIndex(null)}
                     onSave={(updatedPhoto) => {
                         // 保存编辑后的照片信息
                         setPhotos(photos.map((p) => 
                             p.id === updatedPhoto.id ? updatedPhoto : p
                         ));
-                        setEditingPhoto(null);
+                    }}
+                    onNavigate={(newIndex) => {
+                        setEditingPhotoIndex(newIndex);
+                    }}
+                    onReplace={(oldPhoto, newPhoto) => {
+                        // 替换照片
+                        setPhotos(photos.map((p) => 
+                            p.id === oldPhoto.id ? newPhoto : p
+                        ));
                     }}
                 />
             )}

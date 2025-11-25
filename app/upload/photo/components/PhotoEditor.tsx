@@ -320,8 +320,8 @@ export function PhotoEditor({ photo, aspectRatio, styleType, onClose, onSave }: 
                         }}
                     >
                         {styleType === 'white_margin' ? (
-                            // 留白样式 - 外层固定白边 + 内层 object-contain
-                            <div className="absolute inset-0 p-[8%]">
+                            // 留白样式 - 外层等比白边（约4mm）+ 内层 object-contain
+                            <div className="absolute inset-0 p-[5%]">
                                 <div 
                                     ref={containerRef}
                                     className="relative w-full h-full overflow-hidden"

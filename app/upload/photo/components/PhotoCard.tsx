@@ -92,8 +92,8 @@ export function PhotoCard({
                 style={containerStyle}
             >
                 {styleType === 'white_margin' ? (
-                    // 留白样式 - 添加白边
-                    <div className="absolute inset-0 p-[8%] flex items-center justify-center">
+                    // 留白样式 - 添加等比白边（与 PhotoEditor 保持相同比例）
+                    <div className="absolute inset-0 p-[5%] flex items-center justify-center">
                         {/* 删除按钮 */}
                         <button
                             onClick={onRemove}

@@ -30,6 +30,15 @@ export function PhotoCard({
         scale: number;
     } | null>(null);
 
+    // 处理图片点击，只有确认后才能进入编辑
+    const handleImageClick = () => {
+        // 如果有警告且未确认，不允许进入编辑页面
+        if (warningMessage && !isConfirmed) {
+            return;
+        }
+        onEdit();
+    };
+
     // 当容器尺寸或照片变化时，重新计算缩放后的变换
     useEffect(() => {
         if (!photo.transform || !photo.width || !photo.height) {
@@ -89,8 +98,10 @@ export function PhotoCard({
 
                     {/* 图片 */}
                     <div
-                        className="w-full h-full cursor-pointer overflow-hidden"
-                        onClick={onEdit}
+                        className={`w-full h-full overflow-hidden ${
+                            warningMessage && !isConfirmed ? 'cursor-not-allowed' : 'cursor-pointer'
+                        }`}
+                        onClick={handleImageClick}
                     >
                         {photo.transform && scaledTransform ? (
                             // 如果有编辑信息，显示编辑后的效果

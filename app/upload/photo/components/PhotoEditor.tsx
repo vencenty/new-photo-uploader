@@ -1,25 +1,50 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Photo, StyleType, BLEED_AREA_PERCENT, WHITE_MARGIN_PERCENT } from '../types/photo.types';
+import { Photo, StyleType, BLEED_AREA_PERCENT, WHITE_MARGIN_PERCENT, WatermarkConfig, WATERMARK_SIZES } from '../types/photo.types';
 import { calculatePhotoScale } from '../utils/photoTransform';
+import { formatDate } from '../utils/exifReader';
 
 interface PhotoEditorProps {
     photos: Photo[];
     currentIndex: number;
     aspectRatio: number;
     styleType: StyleType;
+    watermarkConfig: WatermarkConfig;
     onClose: () => void;
     onSave: (photo: Photo) => void;
     onNavigate: (index: number) => void;
     onReplace: (oldPhoto: Photo, newPhoto: Photo) => void;
 }
 
+// 获取水印位置样式
+const getWatermarkPositionStyle = (position: string): React.CSSProperties => {
+    const padding = '12px';
+    const baseStyle: React.CSSProperties = { position: 'absolute' };
+    
+    switch (position) {
+        case 'top-left':
+            return { ...baseStyle, top: padding, left: padding };
+        case 'top-center':
+            return { ...baseStyle, top: padding, left: '50%', transform: 'translateX(-50%)' };
+        case 'top-right':
+            return { ...baseStyle, top: padding, right: padding };
+        case 'bottom-left':
+            return { ...baseStyle, bottom: padding, left: padding };
+        case 'bottom-center':
+            return { ...baseStyle, bottom: padding, left: '50%', transform: 'translateX(-50%)' };
+        case 'bottom-right':
+        default:
+            return { ...baseStyle, bottom: padding, right: padding };
+    }
+};
+
 export function PhotoEditor({ 
     photos, 
     currentIndex, 
     aspectRatio, 
     styleType, 
+    watermarkConfig,
     onClose, 
     onSave, 
     onNavigate,
@@ -372,6 +397,36 @@ export function PhotoEditor({
         onClose();
     };
 
+    // 渲染水印
+    const renderWatermark = () => {
+        // 如果水印未启用或照片没有拍摄日期，不渲染
+        if (!watermarkConfig.enabled || !photo?.takenAt) {
+            return null;
+        }
+
+        const sizeConfig = WATERMARK_SIZES.find(s => s.value === watermarkConfig.size);
+        const fontSize = sizeConfig?.fontSize || 16;
+
+        return (
+            <div
+                className="pointer-events-none z-20 whitespace-nowrap"
+                style={{
+                    ...getWatermarkPositionStyle(watermarkConfig.position),
+                    fontFamily: "var(--font-dseg), monospace",
+                    color: watermarkConfig.color,
+                    fontSize: `${fontSize}px`,
+                    opacity: watermarkConfig.opacity / 100,
+                    textShadow: watermarkConfig.color === '#FFFFFF' 
+                        ? '0 1px 3px rgba(0,0,0,0.6)' 
+                        : '0 1px 3px rgba(255,255,255,0.4)',
+                    letterSpacing: '2px',
+                }}
+            >
+                {formatDate(photo.takenAt, watermarkConfig.dateFormat)}
+            </div>
+        );
+    };
+
     // 导航到上一张/下一张照片
     const handleNavigate = (direction: 'prev' | 'next') => {
         // 先自动保存当前照片的修改
@@ -560,6 +615,8 @@ export function PhotoEditor({
                                             draggable={false}
                                         />
                                     </div>
+                                    {/* 日期水印 */}
+                                    {renderWatermark()}
                                 </div>
                             </div>
                         ) : (
@@ -594,6 +651,9 @@ export function PhotoEditor({
                                         draggable={false}
                                     />
                                 </div>
+
+                                {/* 日期水印 */}
+                                {renderWatermark()}
 
                                 {/* 出血线警告遮罩 - 四周斜线区域 */}
                                 <div className="absolute inset-0 pointer-events-none">

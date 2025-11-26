@@ -33,7 +33,80 @@ export interface Photo {
     height?: number; // 图片高度（像素）
     transform?: PhotoTransform; // 编辑后的变换信息
     autoRotated?: boolean; // 是否自动旋转（横图转竖图）
+    takenAt?: string; // 照片拍摄日期（从 EXIF 读取）
 }
+
+// ==================== 水印配置 ====================
+
+/** 水印位置 */
+export type WatermarkPosition = 
+    | 'top-left' 
+    | 'top-center' 
+    | 'top-right' 
+    | 'bottom-left' 
+    | 'bottom-center' 
+    | 'bottom-right';
+
+/** 水印大小 */
+export type WatermarkSize = 'small' | 'medium' | 'large';
+
+/** 日期格式 */
+export type DateFormat = 'YYYY-MM-DD' | 'YYYY/MM/DD' | 'MM/DD/YYYY' | 'DD.MM.YYYY' | 'YYYY年MM月DD日';
+
+/** 水印配置接口 */
+export interface WatermarkConfig {
+    enabled: boolean;           // 是否启用水印
+    position: WatermarkPosition; // 水印位置
+    size: WatermarkSize;        // 水印大小
+    color: string;              // 水印颜色（hex）
+    dateFormat: DateFormat;     // 日期格式
+    opacity: number;            // 透明度 0-100
+}
+
+/** 默认水印配置 */
+export const DEFAULT_WATERMARK_CONFIG: WatermarkConfig = {
+    enabled: false,
+    position: 'bottom-right',
+    size: 'medium',
+    color: '#FFFFFF',
+    dateFormat: 'YYYY-MM-DD',
+    opacity: 80,
+};
+
+/** 水印位置选项 */
+export const WATERMARK_POSITIONS: { value: WatermarkPosition; label: string }[] = [
+    { value: 'top-left', label: '左上' },
+    { value: 'top-center', label: '上中' },
+    { value: 'top-right', label: '右上' },
+    { value: 'bottom-left', label: '左下' },
+    { value: 'bottom-center', label: '下中' },
+    { value: 'bottom-right', label: '右下' },
+];
+
+/** 水印大小选项 */
+export const WATERMARK_SIZES: { value: WatermarkSize; label: string; fontSize: number }[] = [
+    { value: 'small', label: '小', fontSize: 12 },
+    { value: 'medium', label: '中', fontSize: 16 },
+    { value: 'large', label: '大', fontSize: 20 },
+];
+
+/** 日期格式选项 */
+export const DATE_FORMATS: { value: DateFormat; label: string; example: string }[] = [
+    { value: 'YYYY-MM-DD', label: '年-月-日', example: '2024-01-15' },
+    { value: 'YYYY/MM/DD', label: '年/月/日', example: '2024/01/15' },
+    { value: 'MM/DD/YYYY', label: '月/日/年', example: '01/15/2024' },
+    { value: 'DD.MM.YYYY', label: '日.月.年', example: '15.01.2024' },
+    { value: 'YYYY年MM月DD日', label: '中文格式', example: '2024年01月15日' },
+];
+
+/** 预设颜色 */
+export const WATERMARK_COLORS = [
+    '#FFFFFF', // 白色
+    '#000000', // 黑色
+    '#FF6B00', // 橙色
+    '#FFD700', // 金色
+    '#FF69B4', // 粉色
+];
 
 export type PhotoSize = '5寸' | '6寸' | '7寸' | '正方形';
 

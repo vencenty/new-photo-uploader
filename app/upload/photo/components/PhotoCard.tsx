@@ -1,13 +1,15 @@
 'use client';
 
-import { Photo, StyleType, WHITE_MARGIN_PERCENT } from '../types/photo.types';
+import { Photo, StyleType, WHITE_MARGIN_PERCENT, WatermarkConfig, WATERMARK_SIZES } from '../types/photo.types';
 import { useRef, useEffect, useState } from 'react';
 import { scaleTransform, calculateDefaultTransform } from '../utils/photoTransform';
+import { formatDate } from '../utils/exifReader';
 
 interface PhotoCardProps {
     photo: Photo;
     containerStyle: React.CSSProperties;
     styleType: StyleType;
+    watermarkConfig: WatermarkConfig;
     isConfirmed: boolean;
     warningMessage: string | null;
     onRemove: () => void;
@@ -16,10 +18,33 @@ interface PhotoCardProps {
     onEdit: () => void;
 }
 
+// 获取水印位置样式
+const getWatermarkPositionStyle = (position: string, isSmallCard: boolean = false): React.CSSProperties => {
+    const padding = isSmallCard ? '4px' : '8px';
+    const baseStyle: React.CSSProperties = { position: 'absolute' };
+    
+    switch (position) {
+        case 'top-left':
+            return { ...baseStyle, top: padding, left: padding };
+        case 'top-center':
+            return { ...baseStyle, top: padding, left: '50%', transform: 'translateX(-50%)' };
+        case 'top-right':
+            return { ...baseStyle, top: padding, right: padding };
+        case 'bottom-left':
+            return { ...baseStyle, bottom: padding, left: padding };
+        case 'bottom-center':
+            return { ...baseStyle, bottom: padding, left: '50%', transform: 'translateX(-50%)' };
+        case 'bottom-right':
+        default:
+            return { ...baseStyle, bottom: padding, right: padding };
+    }
+};
+
 export function PhotoCard({
     photo,
     containerStyle,
     styleType,
+    watermarkConfig,
     isConfirmed,
     warningMessage,
     onRemove,
@@ -42,6 +67,37 @@ export function PhotoCard({
             return;
         }
         onEdit();
+    };
+
+    // 渲染水印
+    const renderWatermark = () => {
+        // 如果水印未启用或照片没有拍摄日期，不渲染
+        if (!watermarkConfig.enabled || !photo.takenAt) {
+            return null;
+        }
+
+        const sizeConfig = WATERMARK_SIZES.find(s => s.value === watermarkConfig.size);
+        // PhotoCard 中字体缩小（约 60%）
+        const fontSize = (sizeConfig?.fontSize || 16) * 0.6;
+
+        return (
+            <div
+                className="pointer-events-none z-20 whitespace-nowrap"
+                style={{
+                    ...getWatermarkPositionStyle(watermarkConfig.position, true),
+                    fontFamily: "var(--font-dseg), monospace",
+                    color: watermarkConfig.color,
+                    fontSize: `${fontSize}px`,
+                    opacity: watermarkConfig.opacity / 100,
+                    textShadow: watermarkConfig.color === '#FFFFFF' 
+                        ? '0 1px 2px rgba(0,0,0,0.5)' 
+                        : '0 1px 2px rgba(255,255,255,0.3)',
+                    letterSpacing: '1px',
+                }}
+            >
+                {formatDate(photo.takenAt, watermarkConfig.dateFormat)}
+            </div>
+        );
     };
 
     // 当容器尺寸或照片变化时，重新计算缩放后的变换
@@ -144,9 +200,12 @@ export function PhotoCard({
                                 />
                             )}
 
+                            {/* 日期水印 */}
+                            {renderWatermark()}
+
                             {/* 只对未确认且有警告的照片显示警告遮罩层 */}
                             {!isConfirmed && warningMessage && (
-                                <div className="flex flex-col items-center justify-center absolute inset-0 bg-black/40">
+                                <div className="flex flex-col items-center justify-center absolute inset-0 bg-black/40 z-30">
                                     {/* 动态提示文字 */}
                                     <div className="text-lg font-medium text-red-100 mb-2">
                                         {warningMessage}
@@ -215,9 +274,12 @@ export function PhotoCard({
                                 />
                             )}
 
+                            {/* 日期水印 */}
+                            {renderWatermark()}
+
                             {/* 只对未确认且有警告的照片显示警告遮罩层 */}
                             {!isConfirmed && warningMessage && (
-                                <div className="flex flex-col items-center justify-center absolute inset-0 bg-black/40">
+                                <div className="flex flex-col items-center justify-center absolute inset-0 bg-black/40 z-30">
                                     {/* 动态提示文字 */}
                                     <div className="text-lg font-medium text-red-100 mb-2">
                                         {warningMessage}

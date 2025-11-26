@@ -1,11 +1,23 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Photo, PhotoSize, StyleType, PHOTO_SIZES } from './types/photo.types';
+import { 
+    Photo, 
+    PhotoSize, 
+    StyleType, 
+    PHOTO_SIZES,
+    WatermarkConfig,
+    DEFAULT_WATERMARK_CONFIG,
+    WATERMARK_POSITIONS,
+    WATERMARK_SIZES,
+    DATE_FORMATS,
+    WATERMARK_COLORS,
+} from './types/photo.types';
 import { PhotoEditor } from './components/PhotoEditor';
 import { SizeSelector } from './components/SizeSelector';
 import { PhotoCard } from './components/PhotoCard';
 import { getPhotoWarning } from './utils/photoValidation';
+import { readExifDate } from './utils/exifReader';
 
 export default function PhotoPrintPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -15,6 +27,8 @@ export default function PhotoPrintPage() {
     const [showSizeSelector, setShowSizeSelector] = useState(false);
     const [confirmedPhotos, setConfirmedPhotos] = useState<Set<string>>(new Set());
     const [editingPhotoIndex, setEditingPhotoIndex] = useState<number | null>(null);
+    const [watermarkConfig, setWatermarkConfig] = useState<WatermarkConfig>(DEFAULT_WATERMARK_CONFIG);
+    const [showWatermarkConfig, setShowWatermarkConfig] = useState(false);
 
     const PRICE_PER_PHOTO = 3.5;
     const SHIPPING_FEE = 6;
@@ -93,17 +107,20 @@ export default function PhotoPrintPage() {
             try {
                 const imageUrl = URL.createObjectURL(file);
 
-                const { width, height } = await new Promise<{
-                    width: number;
-                    height: number;
-                }>((resolve, reject) => {
-                    const img = document.createElement('img');
-                    img.onload = () => {
-                        resolve({ width: img.width, height: img.height });
-                    };
-                    img.onerror = () => reject(new Error('图片加载失败'));
-                    img.src = imageUrl;
-                });
+                // 并行读取图片尺寸和 EXIF 日期
+                const [dimensions, takenAt] = await Promise.all([
+                    new Promise<{ width: number; height: number }>((resolve, reject) => {
+                        const img = document.createElement('img');
+                        img.onload = () => {
+                            resolve({ width: img.width, height: img.height });
+                        };
+                        img.onerror = () => reject(new Error('图片加载失败'));
+                        img.src = imageUrl;
+                    }),
+                    readExifDate(file),
+                ]);
+
+                const { width, height } = dimensions;
 
                 // 检测是否为横图（宽度大于高度）
                 const isLandscape = width > height;
@@ -116,6 +133,7 @@ export default function PhotoPrintPage() {
                     width,
                     height,
                     autoRotated: isLandscape, // 标记横图需要自动旋转
+                    takenAt, // 从 EXIF 读取的拍摄日期
                 };
 
                 // 每加载完一张照片就立即添加到列表中
@@ -199,9 +217,165 @@ export default function PhotoPrintPage() {
                     </div>
                 </div>
 
+                {/* 日期水印配置区域 */}
+                <div className="bg-white px-4 py-3 border-b">
+                    <div 
+                        className="flex items-center justify-between cursor-pointer"
+                        onClick={() => setShowWatermarkConfig(!showWatermarkConfig)}
+                    >
+                        <span className="text-sm text-gray-600">日期水印</span>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-900">
+                                {watermarkConfig.enabled ? '已开启' : '未开启'}
+                            </span>
+                            <svg
+                                className={`w-4 h-4 text-gray-400 transition-transform ${showWatermarkConfig ? 'rotate-90' : ''}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M9 5l7 7-7 7"
+                                />
+                            </svg>
+                        </div>
+                    </div>
+
+                    {/* 展开的配置面板 */}
+                    {showWatermarkConfig && (
+                        <div className="mt-4 space-y-4">
+                            {/* 开关 */}
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm text-gray-700">添加拍摄日期</span>
+                                <button
+                                    onClick={() => setWatermarkConfig(prev => ({ ...prev, enabled: !prev.enabled }))}
+                                    className={`relative w-12 h-6 rounded-full transition-colors ${
+                                        watermarkConfig.enabled ? 'bg-orange-500' : 'bg-gray-300'
+                                    }`}
+                                >
+                                    <span 
+                                        className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                                            watermarkConfig.enabled ? 'translate-x-7' : 'translate-x-1'
+                                        }`}
+                                    />
+                                </button>
+                            </div>
+
+                            {watermarkConfig.enabled && (
+                                <>
+                                    {/* 位置选择 */}
+                                    <div>
+                                        <span className="text-sm text-gray-700 block mb-2">位置</span>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {WATERMARK_POSITIONS.map((pos) => (
+                                                <button
+                                                    key={pos.value}
+                                                    onClick={() => setWatermarkConfig(prev => ({ ...prev, position: pos.value }))}
+                                                    className={`py-2 px-3 text-xs rounded-lg border transition-colors ${
+                                                        watermarkConfig.position === pos.value
+                                                            ? 'border-orange-500 bg-orange-50 text-orange-600'
+                                                            : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                                                    }`}
+                                                >
+                                                    {pos.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* 大小选择 */}
+                                    <div>
+                                        <span className="text-sm text-gray-700 block mb-2">大小</span>
+                                        <div className="flex gap-2">
+                                            {WATERMARK_SIZES.map((size) => (
+                                                <button
+                                                    key={size.value}
+                                                    onClick={() => setWatermarkConfig(prev => ({ ...prev, size: size.value }))}
+                                                    className={`flex-1 py-2 text-sm rounded-lg border transition-colors ${
+                                                        watermarkConfig.size === size.value
+                                                            ? 'border-orange-500 bg-orange-50 text-orange-600'
+                                                            : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                                                    }`}
+                                                >
+                                                    {size.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* 日期格式 */}
+                                    <div>
+                                        <span className="text-sm text-gray-700 block mb-2">日期格式</span>
+                                        <div className="space-y-2">
+                                            {DATE_FORMATS.map((format) => (
+                                                <button
+                                                    key={format.value}
+                                                    onClick={() => setWatermarkConfig(prev => ({ ...prev, dateFormat: format.value }))}
+                                                    className={`w-full py-2 px-3 text-left text-sm rounded-lg border transition-colors flex justify-between items-center ${
+                                                        watermarkConfig.dateFormat === format.value
+                                                            ? 'border-orange-500 bg-orange-50 text-orange-600'
+                                                            : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                                                    }`}
+                                                >
+                                                    <span>{format.label}</span>
+                                                    <span className="text-gray-400">{format.example}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* 颜色选择 */}
+                                    <div>
+                                        <span className="text-sm text-gray-700 block mb-2">颜色</span>
+                                        <div className="flex gap-2">
+                                            {WATERMARK_COLORS.map((color) => (
+                                                <button
+                                                    key={color}
+                                                    onClick={() => setWatermarkConfig(prev => ({ ...prev, color }))}
+                                                    className={`w-8 h-8 rounded-full border-2 transition-all ${
+                                                        watermarkConfig.color === color
+                                                            ? 'border-orange-500 scale-110'
+                                                            : 'border-gray-200'
+                                                    }`}
+                                                    style={{ 
+                                                        backgroundColor: color,
+                                                        boxShadow: color === '#FFFFFF' ? 'inset 0 0 0 1px #e5e7eb' : undefined 
+                                                    }}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* 透明度 */}
+                                    <div>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-sm text-gray-700">透明度</span>
+                                            <span className="text-sm text-gray-500">{watermarkConfig.opacity}%</span>
+                                        </div>
+                                        <input
+                                            type="range"
+                                            min="20"
+                                            max="100"
+                                            value={watermarkConfig.opacity}
+                                            onChange={(e) => setWatermarkConfig(prev => ({ 
+                                                ...prev, 
+                                                opacity: parseInt(e.target.value) 
+                                            }))}
+                                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                                        />
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+                </div>
+
                 {/* 打印区域示意 */}
-                <div className="px-4 py-3 bg-white">
-                    <div className="flex items-center gap-2 mt-3 text-xs text-gray-500">
+                <div className="px-4 py-3 bg-white border-b">
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                             <path
                                 fillRule="evenodd"
@@ -249,6 +423,7 @@ export default function PhotoPrintPage() {
                                             photo={photo}
                                             containerStyle={getPhotoContainerStyle()}
                                             styleType={selectedStyle}
+                                            watermarkConfig={watermarkConfig}
                                             isConfirmed={confirmedPhotos.has(photo.id)}
                                             warningMessage={getPhotoWarning(photo)}
                                             onRemove={() => handleRemovePhoto(photo.id)}
@@ -342,6 +517,7 @@ export default function PhotoPrintPage() {
                     currentIndex={editingPhotoIndex}
                     aspectRatio={currentAspectRatio}
                     styleType={selectedStyle}
+                    watermarkConfig={watermarkConfig}
                     onClose={() => setEditingPhotoIndex(null)}
                     onSave={(updatedPhoto) => {
                         // 保存编辑后的照片信息

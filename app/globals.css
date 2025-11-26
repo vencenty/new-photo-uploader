@@ -1,8 +1,30 @@
 @import "tailwindcss";
 
+/* DSEG 数码管字体 - 用于日期水印 */
+@font-face {
+  font-family: 'DSEG7';
+  src: url('/fonts/dseg/DSEG7-Classic/DSEG7Classic-Regular.woff2') format('woff2'),
+       url('/fonts/dseg/DSEG7-Classic/DSEG7Classic-Regular.woff') format('woff'),
+       url('/fonts/dseg/DSEG7-Classic/DSEG7Classic-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'DSEG7';
+  src: url('/fonts/dseg/DSEG7-Classic/DSEG7Classic-Bold.woff2') format('woff2'),
+       url('/fonts/dseg/DSEG7-Classic/DSEG7Classic-Bold.woff') format('woff'),
+       url('/fonts/dseg/DSEG7-Classic/DSEG7Classic-Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --font-dseg: 'DSEG7', monospace;
 }
 
 @theme inline {

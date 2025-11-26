@@ -35,9 +35,15 @@ export function PhotoEditor({
     const [minScale, setMinScale] = useState(1);
     const [touchStartDistance, setTouchStartDistance] = useState(0);
     const [touchStartScale, setTouchStartScale] = useState(1);
+    const [touchStartPosition, setTouchStartPosition] = useState({ x: 0, y: 0 });
+    const [isPinching, setIsPinching] = useState(false);
     const imageRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    
+    // 使用 ref 存储中间缩放状态，避免频繁 setState 导致抖动
+    const pendingScaleRef = useRef<number | null>(null);
+    const rafIdRef = useRef<number | null>(null);
     
     // 标记当前照片是否有未保存的修改
     const [hasChanges, setHasChanges] = useState(false);
@@ -180,6 +186,15 @@ export function PhotoEditor({
         setHasChanges(false);
     }, [photo, aspectRatio, styleType, calculateMinScale, constrainPosition]);
 
+    // 清理 requestAnimationFrame
+    useEffect(() => {
+        return () => {
+            if (rafIdRef.current) {
+                cancelAnimationFrame(rafIdRef.current);
+            }
+        };
+    }, []);
+
     // 计算两个触摸点之间的距离
     const getTouchDistance = (touches: React.TouchList) => {
         if (touches.length < 2) return 0;
@@ -188,15 +203,32 @@ export function PhotoEditor({
         return Math.sqrt(dx * dx + dy * dy);
     };
 
+    // 计算双指中心点
+    const getTouchCenter = (touches: React.TouchList) => {
+        if (touches.length < 2) return { x: 0, y: 0 };
+        return {
+            x: (touches[0].clientX + touches[1].clientX) / 2,
+            y: (touches[0].clientY + touches[1].clientY) / 2,
+        };
+    };
+
     const handleTouchStart = (e: React.TouchEvent) => {
+        // 取消任何待处理的动画帧
+        if (rafIdRef.current) {
+            cancelAnimationFrame(rafIdRef.current);
+            rafIdRef.current = null;
+        }
+        
         if (e.touches.length === 2) {
             // 双指缩放开始
             const distance = getTouchDistance(e.touches);
             setTouchStartDistance(distance);
             setTouchStartScale(scale);
+            setTouchStartPosition({ ...position });
+            setIsPinching(true);
             setIsDragging(false);
-        } else if (e.touches.length === 1) {
-            // 单指拖拽
+        } else if (e.touches.length === 1 && !isPinching) {
+            // 单指拖拽（仅在非缩放状态下）
             setIsDragging(true);
             setDragStart({
                 x: e.touches[0].clientX - position.x,
@@ -208,19 +240,33 @@ export function PhotoEditor({
     const handleTouchMove = (e: React.TouchEvent) => {
         e.preventDefault();
         
-        if (e.touches.length === 2 && touchStartDistance > 0) {
-            // 双指缩放
+        if (e.touches.length === 2 && touchStartDistance > 0 && isPinching) {
+            // 双指缩放 - 使用 requestAnimationFrame 平滑更新
             const distance = getTouchDistance(e.touches);
-            const scaleChange = distance / touchStartDistance;
-            const newScale = Math.max(minScale, touchStartScale * scaleChange);
+            const scaleRatio = distance / touchStartDistance;
+            const newScale = Math.max(minScale, Math.min(touchStartScale * scaleRatio, touchStartScale * 3));
             
-            setScale(newScale);
-            setHasChanges(true);
+            // 存储待更新的缩放值
+            pendingScaleRef.current = newScale;
             
-            // 缩放后重新约束位置
-            const constrainedPos = constrainPosition(position, newScale, rotation);
-            setPosition(constrainedPos);
-        } else if (isDragging && e.touches.length === 1) {
+            // 使用 requestAnimationFrame 批量更新
+            if (!rafIdRef.current) {
+                rafIdRef.current = requestAnimationFrame(() => {
+                    if (pendingScaleRef.current !== null) {
+                        const finalScale = pendingScaleRef.current;
+                        setScale(finalScale);
+                        
+                        // 缩放后约束位置
+                        const constrainedPos = constrainPosition(touchStartPosition, finalScale, rotation);
+                        setPosition(constrainedPos);
+                        
+                        setHasChanges(true);
+                        pendingScaleRef.current = null;
+                    }
+                    rafIdRef.current = null;
+                });
+            }
+        } else if (isDragging && e.touches.length === 1 && !isPinching) {
             // 单指拖拽
             const newPosition = {
                 x: e.touches[0].clientX - dragStart.x,
@@ -232,9 +278,29 @@ export function PhotoEditor({
         }
     };
 
-    const handleTouchEnd = () => {
-        setIsDragging(false);
-        setTouchStartDistance(0);
+    const handleTouchEnd = (e: React.TouchEvent) => {
+        // 如果还有一个手指在屏幕上，可能是从双指变成单指
+        if (e.touches.length === 1 && isPinching) {
+            // 从双指缩放切换到单指拖拽
+            setIsPinching(false);
+            setTouchStartDistance(0);
+            setIsDragging(true);
+            setDragStart({
+                x: e.touches[0].clientX - position.x,
+                y: e.touches[0].clientY - position.y
+            });
+        } else if (e.touches.length === 0) {
+            // 所有手指都离开
+            setIsDragging(false);
+            setIsPinching(false);
+            setTouchStartDistance(0);
+            
+            // 清理 RAF
+            if (rafIdRef.current) {
+                cancelAnimationFrame(rafIdRef.current);
+                rafIdRef.current = null;
+            }
+        }
     };
 
     const handleMouseDown = (e: React.MouseEvent) => {

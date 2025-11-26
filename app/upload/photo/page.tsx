@@ -18,6 +18,7 @@ import { SizeSelector } from './components/SizeSelector';
 import { PhotoCard } from './components/PhotoCard';
 import { getPhotoWarning } from './utils/photoValidation';
 import { readExifDate } from './utils/exifReader';
+import { prepareOrderSubmitData, mockSubmitOrder } from './utils/photoSubmit';
 
 export default function PhotoPrintPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -151,8 +152,50 @@ export default function PhotoPrintPage() {
         event.target.value = '';
     };
 
-    const handleSubmitOrder = () => {
-        console.log('提交订单');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleSubmitOrder = async () => {
+        if (photos.length === 0) {
+            alert('请先添加照片');
+            return;
+        }
+
+        // 检查是否有未确认的警告照片
+        const unconfirmedPhotos = photos.filter(
+            p => getPhotoWarning(p) && !confirmedPhotos.has(p.id)
+        );
+        if (unconfirmedPhotos.length > 0) {
+            alert(`还有 ${unconfirmedPhotos.length} 张照片需要确认后才能提交`);
+            return;
+        }
+
+        setIsSubmitting(true);
+
+        try {
+            console.log('🔄 开始准备订单数据...');
+            
+            // 准备订单数据（包含 canvas 合成水印）
+            const orderData = await prepareOrderSubmitData(
+                photos,
+                selectedSize,
+                selectedStyle,
+                currentAspectRatio,
+                watermarkConfig,
+                PRICE_PER_PHOTO,
+                shippingFee
+            );
+
+            // 模拟提交并打印数据
+            await mockSubmitOrder(orderData);
+
+            alert('订单提交成功！请查看控制台了解详细数据。');
+
+        } catch (error) {
+            console.error('订单提交失败:', error);
+            alert('订单提交失败，请重试');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -490,10 +533,14 @@ export default function PhotoPrintPage() {
 
                         <button
                             onClick={handleSubmitOrder}
-                            className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-full font-medium text-base transition-colors shadow-lg"
-                            disabled={photos.length === 0}
+                            className={`text-white px-8 py-3 rounded-full font-medium text-base transition-colors shadow-lg ${
+                                isSubmitting || photos.length === 0
+                                    ? 'bg-gray-400 cursor-not-allowed'
+                                    : 'bg-orange-500 hover:bg-orange-600'
+                            }`}
+                            disabled={photos.length === 0 || isSubmitting}
                         >
-                            提交订单
+                            {isSubmitting ? '处理中...' : '提交订单'}
                         </button>
                     </div>
                 </div>

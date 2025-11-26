@@ -18,7 +18,7 @@ import { SizeSelector } from './components/SizeSelector';
 import { PhotoCard } from './components/PhotoCard';
 import { getPhotoWarning } from './utils/photoValidation';
 import { readExifDate } from './utils/exifReader';
-import { prepareOrderSubmitData, mockSubmitOrder } from './utils/photoSubmit';
+import { prepareOrderSubmitData, mockSubmitOrder, downloadAllPhotos } from './utils/photoSubmit';
 
 export default function PhotoPrintPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -153,6 +153,38 @@ export default function PhotoPrintPage() {
     };
 
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isDownloading, setIsDownloading] = useState(false);
+    const [downloadProgress, setDownloadProgress] = useState('');
+
+    const handleDownloadAll = async () => {
+        if (photos.length === 0) {
+            alert('请先添加照片');
+            return;
+        }
+
+        setIsDownloading(true);
+        setDownloadProgress('准备下载...');
+
+        try {
+            await downloadAllPhotos(
+                photos,
+                watermarkConfig,
+                (current, total, message) => {
+                    setDownloadProgress(`${current}/${total}: ${message}`);
+                }
+            );
+
+            setDownloadProgress('');
+            alert('所有照片下载完成！');
+
+        } catch (error) {
+            console.error('下载失败:', error);
+            alert('下载失败，请重试');
+        } finally {
+            setIsDownloading(false);
+            setDownloadProgress('');
+        }
+    };
 
     const handleSubmitOrder = async () => {
         if (photos.length === 0) {
@@ -517,7 +549,14 @@ export default function PhotoPrintPage() {
                         <div className="text-sm text-green-500 mb-2">已满足包邮条件 🎉</div>
                     )}
 
-                    {/* 价格和提交按钮 */}
+                    {/* 下载进度提示 */}
+                    {isDownloading && downloadProgress && (
+                        <div className="text-sm text-blue-500 mb-2">
+                            {downloadProgress}
+                        </div>
+                    )}
+
+                    {/* 价格和按钮 */}
                     <div className="flex items-center justify-between">
                         <div>
                             <div className="flex items-baseline gap-1">
@@ -531,17 +570,30 @@ export default function PhotoPrintPage() {
                             </div>
                         </div>
 
-                        <button
-                            onClick={handleSubmitOrder}
-                            className={`text-white px-8 py-3 rounded-full font-medium text-base transition-colors shadow-lg ${
-                                isSubmitting || photos.length === 0
-                                    ? 'bg-gray-400 cursor-not-allowed'
-                                    : 'bg-orange-500 hover:bg-orange-600'
-                            }`}
-                            disabled={photos.length === 0 || isSubmitting}
-                        >
-                            {isSubmitting ? '处理中...' : '提交订单'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                            {/* 下载按钮 */}
+                            <button
+                                onClick={handleDownloadAll}
+                                className={`text-white px-6 py-3 rounded-full font-medium text-base transition-colors shadow-lg ${
+                                    isDownloading || photos.length === 0
+                                        ? 'bg-gray-400 cursor-not-allowed'
+                                        : 'bg-blue-500 hover:bg-blue-600'
+                                }`}
+                                disabled={photos.length === 0 || isDownloading}
+                            >
+                                {isDownloading ? '下载中...' : '下载照片'}
+                            </button>
+
+                            {/* 提交按钮（暂时禁用） */}
+                            <button
+                                onClick={handleSubmitOrder}
+                                className="bg-gray-400 cursor-not-allowed text-white px-6 py-3 rounded-full font-medium text-base transition-colors shadow-lg"
+                                disabled={true}
+                                title="功能开发中"
+                            >
+                                提交订单
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

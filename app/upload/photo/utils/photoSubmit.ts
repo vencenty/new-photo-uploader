@@ -522,6 +522,221 @@ export const prepareOrderSubmitData = async (
     };
 };
 
+// ==================== 下载功能 ====================
+
+/**
+ * 从原始图片 URL 获取 ArrayBuffer
+ */
+const fetchImageAsArrayBuffer = async (url: string): Promise<ArrayBuffer> => {
+    const response = await fetch(url);
+    return response.arrayBuffer();
+};
+
+/**
+ * 从 JPEG ArrayBuffer 中提取 EXIF 数据段
+ */
+const extractExifSegment = (buffer: ArrayBuffer): ArrayBuffer | null => {
+    const view = new DataView(buffer);
+    
+    // 检查 JPEG SOI 标记
+    if (view.getUint16(0) !== 0xFFD8) {
+        return null;
+    }
+
+    let offset = 2;
+    const length = view.byteLength;
+
+    while (offset < length) {
+        if (view.getUint8(offset) !== 0xFF) {
+            return null;
+        }
+
+        const marker = view.getUint8(offset + 1);
+        
+        // APP1 标记 (EXIF)
+        if (marker === 0xE1) {
+            const segmentLength = view.getUint16(offset + 2);
+            // 返回完整的 APP1 段（包括标记和长度）
+            return buffer.slice(offset, offset + 2 + segmentLength);
+        }
+        
+        // 跳过其他段
+        if (marker === 0xD8 || marker === 0xD9) {
+            offset += 2;
+        } else {
+            const segmentLength = view.getUint16(offset + 2);
+            offset += 2 + segmentLength;
+        }
+    }
+
+    return null;
+};
+
+/**
+ * 将 EXIF 数据注入到 JPEG Blob 中
+ */
+const injectExifToJpeg = async (jpegBlob: Blob, exifSegment: ArrayBuffer): Promise<Blob> => {
+    const jpegBuffer = await jpegBlob.arrayBuffer();
+    const jpegView = new DataView(jpegBuffer);
+    
+    // 检查是否为有效的 JPEG
+    if (jpegView.getUint16(0) !== 0xFFD8) {
+        return jpegBlob;
+    }
+    
+    // 找到 SOI 后的第一个段的位置
+    let insertOffset = 2;
+    
+    // 跳过可能存在的 APP0 (JFIF) 段
+    if (jpegView.getUint8(2) === 0xFF && jpegView.getUint8(3) === 0xE0) {
+        const app0Length = jpegView.getUint16(4);
+        insertOffset = 4 + app0Length;
+    }
+    
+    // 构建新的 JPEG
+    const before = jpegBuffer.slice(0, insertOffset);
+    const after = jpegBuffer.slice(insertOffset);
+    
+    // 合并数据
+    const result = new Uint8Array(before.byteLength + exifSegment.byteLength + after.byteLength);
+    result.set(new Uint8Array(before), 0);
+    result.set(new Uint8Array(exifSegment), before.byteLength);
+    result.set(new Uint8Array(after), before.byteLength + exifSegment.byteLength);
+    
+    return new Blob([result], { type: 'image/jpeg' });
+};
+
+/**
+ * 在原图上绘制水印（保持原始尺寸，不裁剪）
+ */
+const addWatermarkToOriginal = async (
+    photo: Photo,
+    watermarkConfig: WatermarkConfig
+): Promise<Blob> => {
+    // 加载字体
+    if (watermarkConfig.enabled && photo.takenAt) {
+        await loadDsegFont();
+    }
+    
+    // 加载原图
+    const img = await loadImage(photo.url);
+    
+    // 创建与原图相同尺寸的 canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d')!;
+    
+    // 绘制原图
+    ctx.drawImage(img, 0, 0);
+    
+    // 绘制水印
+    if (watermarkConfig.enabled && photo.takenAt) {
+        drawWatermark(ctx, watermarkConfig, photo.takenAt, img.width, img.height);
+    }
+    
+    // 导出为 Blob（100% 质量）
+    return new Promise((resolve, reject) => {
+        canvas.toBlob(
+            (blob) => {
+                if (blob) {
+                    resolve(blob);
+                } else {
+                    reject(new Error('Canvas 导出失败'));
+                }
+            },
+            'image/jpeg',
+            1.0 // 100% 质量
+        );
+    });
+};
+
+/**
+ * 处理单张照片并下载（保留 EXIF）
+ */
+export const processPhotoForDownload = async (
+    photo: Photo,
+    watermarkConfig: WatermarkConfig,
+    onProgress?: (message: string) => void
+): Promise<Blob> => {
+    onProgress?.(`处理照片中...`);
+    
+    // 在原图上添加水印
+    let processedBlob = await addWatermarkToOriginal(photo, watermarkConfig);
+    
+    // 尝试提取并注入 EXIF
+    if (photo.url.startsWith('blob:')) {
+        try {
+            const originalBuffer = await fetchImageAsArrayBuffer(photo.url);
+            const exifSegment = extractExifSegment(originalBuffer);
+            
+            if (exifSegment) {
+                processedBlob = await injectExifToJpeg(processedBlob, exifSegment);
+                onProgress?.(`已保留 EXIF 信息`);
+            }
+        } catch (error) {
+            console.warn('EXIF 注入失败，使用无 EXIF 版本:', error);
+        }
+    }
+    
+    return processedBlob;
+};
+
+/**
+ * 触发文件下载
+ */
+const triggerDownload = (blob: Blob, filename: string): void => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+};
+
+/**
+ * 下载所有照片（带水印，保留 EXIF）
+ */
+export const downloadAllPhotos = async (
+    photos: Photo[],
+    watermarkConfig: WatermarkConfig,
+    onProgress?: (current: number, total: number, message: string) => void
+): Promise<void> => {
+    const total = photos.length;
+    
+    for (let i = 0; i < photos.length; i++) {
+        const photo = photos[i];
+        onProgress?.(i + 1, total, `正在处理第 ${i + 1}/${total} 张照片...`);
+        
+        try {
+            const blob = await processPhotoForDownload(
+                photo, 
+                watermarkConfig,
+                (msg) => onProgress?.(i + 1, total, msg)
+            );
+            
+            // 生成文件名
+            const timestamp = photo.takenAt?.replace(/-/g, '') || Date.now().toString();
+            const filename = `photo_${timestamp}_${i + 1}.jpg`;
+            
+            // 触发下载
+            triggerDownload(blob, filename);
+            
+            // 稍微延迟，避免浏览器阻止多个下载
+            if (i < photos.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
+        } catch (error) {
+            console.error(`照片 ${i + 1} 处理失败:`, error);
+            throw new Error(`照片 ${i + 1} 处理失败`);
+        }
+    }
+    
+    onProgress?.(total, total, '全部下载完成！');
+};
+
 /**
  * 模拟提交订单（用于测试）
  */

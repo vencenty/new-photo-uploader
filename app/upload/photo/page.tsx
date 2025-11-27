@@ -17,7 +17,7 @@ import { PhotoEditor } from './components/PhotoEditor';
 import { SizeSelector } from './components/SizeSelector';
 import { PhotoCard } from './components/PhotoCard';
 import { getPhotoWarning } from './utils/photoValidation';
-import { readExifDate } from './utils/exifReader';
+import { readExifDate, getFileDateFallback } from './utils/exifReader';
 import { prepareOrderSubmitData, mockSubmitOrder, downloadAllPhotos } from './utils/photoSubmit';
 import { isHeicFile, convertHeicToJpeg } from './utils/heicConverter';
 
@@ -123,8 +123,8 @@ export default function PhotoPrintPage() {
                 const imageUrl = URL.createObjectURL(imageBlob);
 
                 // 并行读取图片尺寸和 EXIF 日期
-                // 注意：EXIF 从原始文件读取（转换后会丢失）
-                const [dimensions, takenAt] = await Promise.all([
+                // 注意：EXIF 从原始文件读取（HEIC 转换后会丢失）
+                const [dimensions, exifDate] = await Promise.all([
                     new Promise<{ width: number; height: number }>((resolve, reject) => {
                         const img = document.createElement('img');
                         img.onload = () => {
@@ -133,9 +133,13 @@ export default function PhotoPrintPage() {
                         img.onerror = () => reject(new Error('图片加载失败'));
                         img.src = imageUrl;
                     }),
-                    // HEIC 文件从原始文件读取 EXIF
-                    wasHeicConverted ? readHeicExifDate(file) : readExifDate(file),
+                    // 从原始文件读取 EXIF（包括 HEIC）
+                    readExifDate(file),
                 ]);
+
+                // 如果 EXIF 读取失败，使用文件修改日期作为备选
+                const takenAt = exifDate || getFileDateFallback(file);
+                console.log(`📅 照片日期: ${takenAt} (${exifDate ? 'EXIF' : '文件日期'})`);
 
                 const { width, height } = dimensions;
 
@@ -169,16 +173,6 @@ export default function PhotoPrintPage() {
         event.target.value = '';
     };
 
-    // 读取 HEIC 文件的 EXIF 日期（需要特殊处理）
-    const readHeicExifDate = async (file: File): Promise<string | undefined> => {
-        // HEIC 文件的 EXIF 读取比较复杂，这里简单尝试读取
-        // 如果失败则返回 undefined
-        try {
-            return await readExifDate(file);
-        } catch {
-            return undefined;
-        }
-    };
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);

@@ -34,9 +34,38 @@ const getWatermarkPositionStyle = (position: string): React.CSSProperties => {
         case 'bottom-center':
             return { ...baseStyle, bottom: padding, left: '50%', transform: 'translateX(-50%)' };
         case 'bottom-right':
+            return { ...baseStyle, bottom: padding, right: padding };
+        // 支持旋转后的中间位置
+        case 'center-left':
+            return { ...baseStyle, top: '50%', left: padding, transform: 'translateY(-50%)' };
+        case 'center-right':
+            return { ...baseStyle, top: '50%', right: padding, transform: 'translateY(-50%)' };
         default:
             return { ...baseStyle, bottom: padding, right: padding };
     }
+};
+
+// 获取基于原图方向的水印位置
+// 如果图片被旋转显示，水印位置也需要相应调整
+const getOriginalOrientationWatermarkPosition = (
+    position: string, 
+    isAutoRotated: boolean
+): string => {
+    if (!isAutoRotated) {
+        return position;
+    }
+    
+    // 横图旋转90°显示为竖图时，位置映射
+    const rotatedPositionMap: Record<string, string> = {
+        'bottom-right': 'top-right',
+        'bottom-left': 'bottom-right',
+        'bottom-center': 'center-right',
+        'top-right': 'top-left',
+        'top-left': 'bottom-left',
+        'top-center': 'center-left',
+    };
+    
+    return rotatedPositionMap[position] || position;
 };
 
 export function PhotoEditor({ 
@@ -410,20 +439,36 @@ export function PhotoEditor({
         // 根据颜色类型选择不同的阴影效果
         const isLightColor = ['#FFFFFF', '#FFD700'].includes(watermarkConfig.color);
         const textShadow = isLightColor
-            ? '0 1px 3px rgba(0,0,0,0.6)'  // 亮色用深色阴影
-            : `0 0 6px ${watermarkConfig.color}40, 0 0 3px ${watermarkConfig.color}60`; // 深色用自身颜色的柔和发光
+            ? '0 1px 3px rgba(0,0,0,0.6)'
+            : `0 0 6px ${watermarkConfig.color}40, 0 0 3px ${watermarkConfig.color}60`;
+
+        // 检查是否旋转了90度或270度
+        const isRotated90or270 = rotation % 180 !== 0;
+        
+        // 根据原图方向调整水印位置
+        const adjustedPosition = getOriginalOrientationWatermarkPosition(
+            watermarkConfig.position,
+            isRotated90or270
+        );
+        
+        const basePositionStyle = getWatermarkPositionStyle(adjustedPosition);
 
         return (
             <div
                 className="pointer-events-none z-20 whitespace-nowrap"
                 style={{
-                    ...getWatermarkPositionStyle(watermarkConfig.position),
+                    ...basePositionStyle,
                     fontFamily: "var(--font-dseg), monospace",
                     color: watermarkConfig.color,
                     fontSize: `${fontSize}px`,
                     opacity: watermarkConfig.opacity / 100,
                     textShadow,
                     letterSpacing: '2px',
+                    // 如果图片旋转了，水印也需要旋转以匹配原图方向
+                    transform: isRotated90or270 
+                        ? `${basePositionStyle.transform || ''} rotate(-90deg)`.trim()
+                        : basePositionStyle.transform,
+                    transformOrigin: 'center',
                 }}
             >
                 {formatDate(photo.takenAt, watermarkConfig.dateFormat)}

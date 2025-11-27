@@ -35,6 +35,12 @@ const getWatermarkPositionStyle = (position: string, isSmallCard: boolean = fals
         case 'bottom-center':
             return { ...baseStyle, bottom: padding, left: '50%', transform: 'translateX(-50%)' };
         case 'bottom-right':
+            return { ...baseStyle, bottom: padding, right: padding };
+        // 新增：支持旋转后的中间位置
+        case 'center-left':
+            return { ...baseStyle, top: '50%', left: padding, transform: 'translateY(-50%)' };
+        case 'center-right':
+            return { ...baseStyle, top: '50%', right: padding, transform: 'translateY(-50%)' };
         default:
             return { ...baseStyle, bottom: padding, right: padding };
     }
@@ -69,6 +75,31 @@ export function PhotoCard({
         onEdit();
     };
 
+    // 获取基于原图方向的水印位置
+    // 如果图片被旋转显示，水印位置也需要相应调整
+    const getOriginalOrientationWatermarkPosition = (
+        position: string, 
+        isAutoRotated: boolean
+    ): string => {
+        if (!isAutoRotated) {
+            return position;
+        }
+        
+        // 横图旋转90°显示为竖图时，位置映射：
+        // 原图 bottom-right → 旋转后应该在 top-right（因为原图的右边变成了上边）
+        // 但我们需要的是：水印在原图的 bottom-right，旋转后在显示容器中的位置
+        const rotatedPositionMap: Record<string, string> = {
+            'bottom-right': 'top-right',    // 原图右下 → 旋转后变成右上（从原图视角看）
+            'bottom-left': 'bottom-right',  // 原图左下 → 旋转后变成右下
+            'bottom-center': 'center-right', // 原图下中 → 旋转后变成右中
+            'top-right': 'top-left',        // 原图右上 → 旋转后变成左上
+            'top-left': 'bottom-left',      // 原图左上 → 旋转后变成左下
+            'top-center': 'center-left',    // 原图上中 → 旋转后变成左中
+        };
+        
+        return rotatedPositionMap[position] || position;
+    };
+
     // 渲染水印
     const renderWatermark = () => {
         // 如果水印未启用或照片没有拍摄日期，不渲染
@@ -83,20 +114,35 @@ export function PhotoCard({
         // 根据颜色类型选择不同的阴影效果
         const isLightColor = ['#FFFFFF', '#FFD700'].includes(watermarkConfig.color);
         const textShadow = isLightColor
-            ? '0 1px 2px rgba(0,0,0,0.6)'  // 亮色用深色阴影
-            : `0 0 4px ${watermarkConfig.color}40, 0 0 2px ${watermarkConfig.color}60`; // 深色用自身颜色的柔和发光
+            ? '0 1px 2px rgba(0,0,0,0.6)'
+            : `0 0 4px ${watermarkConfig.color}40, 0 0 2px ${watermarkConfig.color}60`;
+
+        // 获取当前的旋转角度
+        const rotation = scaledTransform?.rotation || (photo.autoRotated ? 90 : 0);
+        const isRotated90or270 = rotation % 180 !== 0;
+        
+        // 根据原图方向调整水印位置
+        const adjustedPosition = getOriginalOrientationWatermarkPosition(
+            watermarkConfig.position,
+            isRotated90or270
+        );
 
         return (
             <div
                 className="pointer-events-none z-20 whitespace-nowrap"
                 style={{
-                    ...getWatermarkPositionStyle(watermarkConfig.position, true),
+                    ...getWatermarkPositionStyle(adjustedPosition, true),
                     fontFamily: "var(--font-dseg), monospace",
                     color: watermarkConfig.color,
                     fontSize: `${fontSize}px`,
                     opacity: watermarkConfig.opacity / 100,
                     textShadow,
                     letterSpacing: '1px',
+                    // 如果图片旋转了，水印也需要旋转以匹配原图方向
+                    transform: isRotated90or270 
+                        ? `${getWatermarkPositionStyle(adjustedPosition, true).transform || ''} rotate(-90deg)`.trim()
+                        : getWatermarkPositionStyle(adjustedPosition, true).transform,
+                    transformOrigin: 'center',
                 }}
             >
                 {formatDate(photo.takenAt, watermarkConfig.dateFormat)}

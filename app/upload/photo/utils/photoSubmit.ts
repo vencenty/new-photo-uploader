@@ -165,9 +165,8 @@ const drawWatermark = (
     
     const dateText = formatDate(takenAt, watermarkConfig.dateFormat);
     
-    // 设置字体
+    // 设置字体（Canvas 不支持 letterSpacing，字间距效果由字体本身控制）
     ctx.font = `${fontSize}px 'DSEG7', monospace`;
-    ctx.letterSpacing = '2px';
     
     // 测量文字宽度
     const textMetrics = ctx.measureText(dateText);

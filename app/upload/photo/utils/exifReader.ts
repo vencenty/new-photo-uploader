@@ -1,15 +1,33 @@
 /**
+ * 检查是否为 HEIC/HEIF 文件
+ */
+const isHeicFile = (file: File): boolean => {
+    const fileName = file.name.toLowerCase();
+    const mimeType = file.type.toLowerCase();
+    return (
+        fileName.endsWith('.heic') ||
+        fileName.endsWith('.heif') ||
+        mimeType === 'image/heic' ||
+        mimeType === 'image/heif'
+    );
+};
+
+/**
  * 从图片文件中读取 EXIF 拍摄日期
- * 支持 JPEG 格式
+ * 支持 JPEG 和 HEIC 格式
  */
 export async function readExifDate(file: File): Promise<string | undefined> {
-    return new Promise((resolve) => {
-        // 只处理 JPEG 格式
-        if (!file.type.includes('jpeg') && !file.type.includes('jpg')) {
-            resolve(undefined);
-            return;
-        }
+    // HEIC 文件使用特殊的读取方法
+    if (isHeicFile(file)) {
+        return readHeicDate(file);
+    }
+    
+    // 只处理 JPEG 格式
+    if (!file.type.includes('jpeg') && !file.type.includes('jpg') && !file.type.includes('image/')) {
+        return undefined;
+    }
 
+    return new Promise((resolve) => {
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
@@ -23,6 +41,69 @@ export async function readExifDate(file: File): Promise<string | undefined> {
         reader.onerror = () => resolve(undefined);
         reader.readAsArrayBuffer(file.slice(0, 128 * 1024)); // 只读取前 128KB
     });
+}
+
+/**
+ * 从 HEIC 文件中读取拍摄日期
+ * HEIC 文件的 EXIF 数据格式不同于 JPEG，需要特殊处理
+ */
+async function readHeicDate(file: File): Promise<string | undefined> {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const buffer = e.target?.result as ArrayBuffer;
+                const uint8Array = new Uint8Array(buffer);
+                
+                // 尝试在二进制数据中搜索日期字符串模式
+                // HEIC 文件可能包含类似 "2024:01:15 10:30:00" 的日期字符串
+                const text = new TextDecoder('ascii', { fatal: false }).decode(uint8Array);
+                
+                // 搜索 EXIF 日期格式: YYYY:MM:DD HH:MM:SS
+                const datePattern = /(\d{4}):(\d{2}):(\d{2})\s+\d{2}:\d{2}:\d{2}/g;
+                const matches = text.match(datePattern);
+                
+                if (matches && matches.length > 0) {
+                    // 使用找到的第一个日期
+                    const dateMatch = matches[0].match(/(\d{4}):(\d{2}):(\d{2})/);
+                    if (dateMatch) {
+                        resolve(`${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`);
+                        return;
+                    }
+                }
+                
+                // 尝试搜索其他日期格式
+                const isoDatePattern = /(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}/g;
+                const isoMatches = text.match(isoDatePattern);
+                
+                if (isoMatches && isoMatches.length > 0) {
+                    const dateMatch = isoMatches[0].match(/(\d{4})-(\d{2})-(\d{2})/);
+                    if (dateMatch) {
+                        resolve(`${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`);
+                        return;
+                    }
+                }
+                
+                resolve(undefined);
+            } catch {
+                resolve(undefined);
+            }
+        };
+        reader.onerror = () => resolve(undefined);
+        // HEIC 文件可能需要读取更多数据来找到日期信息
+        reader.readAsArrayBuffer(file.slice(0, 256 * 1024)); // 读取前 256KB
+    });
+}
+
+/**
+ * 从文件的修改时间获取日期（作为备选方案）
+ */
+export function getFileDateFallback(file: File): string {
+    const date = new Date(file.lastModified);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 /**

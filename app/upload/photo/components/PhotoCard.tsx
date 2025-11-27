@@ -80,6 +80,12 @@ export function PhotoCard({
         // PhotoCard 中字体缩小（约 60%）
         const fontSize = (sizeConfig?.fontSize || 16) * 0.6;
 
+        // 根据颜色类型选择不同的阴影效果
+        const isLightColor = ['#FFFFFF', '#FFD700'].includes(watermarkConfig.color);
+        const textShadow = isLightColor
+            ? '0 1px 2px rgba(0,0,0,0.6)'  // 亮色用深色阴影
+            : `0 0 4px ${watermarkConfig.color}40, 0 0 2px ${watermarkConfig.color}60`; // 深色用自身颜色的柔和发光
+
         return (
             <div
                 className="pointer-events-none z-20 whitespace-nowrap"
@@ -89,9 +95,7 @@ export function PhotoCard({
                     color: watermarkConfig.color,
                     fontSize: `${fontSize}px`,
                     opacity: watermarkConfig.opacity / 100,
-                    textShadow: watermarkConfig.color === '#FFFFFF' 
-                        ? '0 1px 2px rgba(0,0,0,0.5)' 
-                        : '0 1px 2px rgba(255,255,255,0.3)',
+                    textShadow,
                     letterSpacing: '1px',
                 }}
             >

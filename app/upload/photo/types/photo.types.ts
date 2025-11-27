@@ -5,7 +5,7 @@
  * 用于显示出血警告区域，提示用户该区域内容可能被裁切
  * 值范围：0-50，单位：%
  */
-export const BLEED_AREA_PERCENT = 3;
+export const BLEED_AREA_PERCENT = 1;
 
 /**
  * 留白边框百分比（留白样式）
@@ -51,7 +51,7 @@ export type WatermarkPosition =
 export type WatermarkSize = 'small' | 'medium' | 'large';
 
 /** 日期格式 */
-export type DateFormat = 'YYYY-MM-DD' | 'YYYY/MM/DD' | 'MM/DD/YYYY' | 'DD.MM.YYYY' | 'YYYY年MM月DD日';
+export type DateFormat = 'YYYY-MM-DD' | 'YYYY/MM/DD' | 'YYYY MM DD' | '\'YY MM DD' | 'MM/DD/YYYY' | 'DD.MM.YYYY' | 'YYYY年MM月DD日';
 
 /** 水印配置接口 */
 export interface WatermarkConfig {
@@ -68,9 +68,9 @@ export const DEFAULT_WATERMARK_CONFIG: WatermarkConfig = {
     enabled: false,
     position: 'bottom-right',
     size: 'medium',
-    color: '#FFFFFF',
+    color: '#FF6B00',  // 橙红色 - 传统照片日期戳颜色
     dateFormat: 'YYYY-MM-DD',
-    opacity: 80,
+    opacity: 90,
 };
 
 /** 水印位置选项 */
@@ -85,27 +85,29 @@ export const WATERMARK_POSITIONS: { value: WatermarkPosition; label: string }[] 
 
 /** 水印大小选项 */
 export const WATERMARK_SIZES: { value: WatermarkSize; label: string; fontSize: number }[] = [
-    { value: 'small', label: '小', fontSize: 12 },
-    { value: 'medium', label: '中', fontSize: 16 },
-    { value: 'large', label: '大', fontSize: 20 },
+    { value: 'small', label: '小', fontSize: 8 },
+    { value: 'medium', label: '中', fontSize: 10 },
+    { value: 'large', label: '大', fontSize: 12 },
 ];
 
 /** 日期格式选项 */
 export const DATE_FORMATS: { value: DateFormat; label: string; example: string }[] = [
     { value: 'YYYY-MM-DD', label: '年-月-日', example: '2024-01-15' },
     { value: 'YYYY/MM/DD', label: '年/月/日', example: '2024/01/15' },
-    { value: 'MM/DD/YYYY', label: '月/日/年', example: '01/15/2024' },
-    { value: 'DD.MM.YYYY', label: '日.月.年', example: '15.01.2024' },
-    { value: 'YYYY年MM月DD日', label: '中文格式', example: '2024年01月15日' },
+    { value: 'YYYY/MM/DD', label: '年/月/日', example: '2024 01 15' },
+    { value: 'YYYY MM DD', label: '年 月 日', example: '2024 01 15' },
+    // { value: 'MM/DD/YYYY', label: '月/日/年', example: '01/15/2024' },
+    // { value: 'DD.MM.YYYY', label: '日.月.年', example: '15.01.2024' },
+    // { value: 'YYYY年MM月DD日', label: '中文格式', example: '2024年01月15日' },
 ];
 
-/** 预设颜色 */
+/** 预设颜色 - 传统照片日期戳风格 */
 export const WATERMARK_COLORS = [
+    '#FF6B00', // 橙红色（经典日期戳）
+    '#FF8C00', // 暗橙色
+    '#FFD700', // 金黄色
     '#FFFFFF', // 白色
     '#000000', // 黑色
-    '#FF6B00', // 橙色
-    '#FFD700', // 金色
-    '#FF69B4', // 粉色
 ];
 
 export type PhotoSize = '5寸' | '6寸' | '7寸' | '正方形';

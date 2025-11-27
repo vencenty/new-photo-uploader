@@ -188,17 +188,21 @@ const drawWatermark = (
     ctx.textBaseline = 'bottom';
     ctx.globalAlpha = watermarkConfig.opacity / 100;
     
-    // 绘制阴影/描边增强可读性
-    if (watermarkConfig.color === '#FFFFFF') {
+    // 根据颜色类型选择不同的阴影效果
+    const isLightColor = ['#FFFFFF', '#FFD700'].includes(watermarkConfig.color);
+    
+    if (isLightColor) {
+        // 亮色用深色阴影
         ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
         ctx.shadowBlur = 3;
         ctx.shadowOffsetX = 1;
         ctx.shadowOffsetY = 1;
     } else {
-        ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
-        ctx.shadowBlur = 2;
-        ctx.shadowOffsetX = 1;
-        ctx.shadowOffsetY = 1;
+        // 橙红色等深色用自身颜色的柔和发光效果
+        ctx.shadowColor = watermarkConfig.color;
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
     }
     
     // 绘制文字

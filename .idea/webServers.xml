@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="af3b4c79-0253-4605-9814-549542e623a6" name="root">
+        <fileTransfer rootFolder="/www/wwwroot/photo-date.vencenty.cn" accessType="SFTP" host="111.231.54.47" port="22122" sshConfigId="5e8e9f2c-27e4-4a4a-b3d7-eca13f3da9ec" sshConfig="root@111.231.54.47:22122 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" isUseRsync="true" isUseSudo="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

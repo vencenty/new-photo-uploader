@@ -407,6 +407,12 @@ export function PhotoEditor({
         const sizeConfig = WATERMARK_SIZES.find(s => s.value === watermarkConfig.size);
         const fontSize = sizeConfig?.fontSize || 16;
 
+        // 根据颜色类型选择不同的阴影效果
+        const isLightColor = ['#FFFFFF', '#FFD700'].includes(watermarkConfig.color);
+        const textShadow = isLightColor
+            ? '0 1px 3px rgba(0,0,0,0.6)'  // 亮色用深色阴影
+            : `0 0 6px ${watermarkConfig.color}40, 0 0 3px ${watermarkConfig.color}60`; // 深色用自身颜色的柔和发光
+
         return (
             <div
                 className="pointer-events-none z-20 whitespace-nowrap"
@@ -416,9 +422,7 @@ export function PhotoEditor({
                     color: watermarkConfig.color,
                     fontSize: `${fontSize}px`,
                     opacity: watermarkConfig.opacity / 100,
-                    textShadow: watermarkConfig.color === '#FFFFFF' 
-                        ? '0 1px 3px rgba(0,0,0,0.6)' 
-                        : '0 1px 3px rgba(255,255,255,0.4)',
+                    textShadow,
                     letterSpacing: '2px',
                 }}
             >

@@ -19,6 +19,7 @@ import { PhotoCard } from './components/PhotoCard';
 import { getPhotoWarning } from './utils/photoValidation';
 import { readExifDate } from './utils/exifReader';
 import { prepareOrderSubmitData, mockSubmitOrder, downloadAllPhotos } from './utils/photoSubmit';
+import { isHeicFile, convertHeicToJpeg } from './utils/heicConverter';
 
 export default function PhotoPrintPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -95,7 +96,9 @@ export default function PhotoPrintPage() {
 
         // 逐个加载和渲染照片
         for (const file of Array.from(files)) {
-            if (!file.type.startsWith('image/')) {
+            // 检查是否为图片（包括 HEIC）
+            const isImage = file.type.startsWith('image/') || isHeicFile(file);
+            if (!isImage) {
                 errors.push(`${file.name} 不是图片文件`);
                 continue;
             }
@@ -106,9 +109,21 @@ export default function PhotoPrintPage() {
             }
 
             try {
-                const imageUrl = URL.createObjectURL(file);
+                let imageBlob: Blob = file;
+                let wasHeicConverted = false;
+
+                // 如果是 HEIC 文件，先转换为 JPEG
+                if (isHeicFile(file)) {
+                    console.log(`🔄 转换 HEIC 文件: ${file.name}`);
+                    imageBlob = await convertHeicToJpeg(file);
+                    wasHeicConverted = true;
+                    console.log(`✅ HEIC 转换完成: ${file.name}`);
+                }
+
+                const imageUrl = URL.createObjectURL(imageBlob);
 
                 // 并行读取图片尺寸和 EXIF 日期
+                // 注意：EXIF 从原始文件读取（转换后会丢失）
                 const [dimensions, takenAt] = await Promise.all([
                     new Promise<{ width: number; height: number }>((resolve, reject) => {
                         const img = document.createElement('img');
@@ -118,7 +133,8 @@ export default function PhotoPrintPage() {
                         img.onerror = () => reject(new Error('图片加载失败'));
                         img.src = imageUrl;
                     }),
-                    readExifDate(file),
+                    // HEIC 文件从原始文件读取 EXIF
+                    wasHeicConverted ? readHeicExifDate(file) : readExifDate(file),
                 ]);
 
                 const { width, height } = dimensions;
@@ -140,7 +156,8 @@ export default function PhotoPrintPage() {
                 // 每加载完一张照片就立即添加到列表中
                 setPhotos((prevPhotos) => [...prevPhotos, newPhoto]);
             } catch (error) {
-                errors.push(`${file.name} 加载失败`);
+                const errorMessage = error instanceof Error ? error.message : '未知错误';
+                errors.push(`${file.name}: ${errorMessage}`);
                 console.error(`图片加载错误:`, error);
             }
         }
@@ -150,6 +167,17 @@ export default function PhotoPrintPage() {
         }
 
         event.target.value = '';
+    };
+
+    // 读取 HEIC 文件的 EXIF 日期（需要特殊处理）
+    const readHeicExifDate = async (file: File): Promise<string | undefined> => {
+        // HEIC 文件的 EXIF 读取比较复杂，这里简单尝试读取
+        // 如果失败则返回 undefined
+        try {
+            return await readExifDate(file);
+        } catch {
+            return undefined;
+        }
     };
 
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -236,7 +264,7 @@ export default function PhotoPrintPage() {
             <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,.heic,.heif"
                 multiple
                 onChange={handleFileChange}
                 className="hidden"

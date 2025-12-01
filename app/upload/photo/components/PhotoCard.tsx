@@ -16,6 +16,7 @@ interface PhotoCardProps {
     onQuantityChange: (delta: number) => void;
     onConfirm: () => void;
     onEdit: () => void;
+    disabled?: boolean;
 }
 
 // 获取水印位置样式
@@ -57,6 +58,7 @@ export function PhotoCard({
     onQuantityChange,
     onConfirm,
     onEdit,
+    disabled = false,
 }: PhotoCardProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const innerContainerRef = useRef<HTMLDivElement>(null);
@@ -68,6 +70,11 @@ export function PhotoCard({
 
     // 处理图片点击，只有确认后才能进入编辑
     const handleImageClick = () => {
+        // 如果禁用状态，直接返回
+        if (disabled) {
+            return;
+        }
+
         // 如果有警告且未确认，不允许进入编辑页面
         if (warningMessage && !isConfirmed) {
             return;
@@ -205,8 +212,11 @@ export function PhotoCard({
                     >
                         {/* 删除按钮 */}
                         <button
-                            onClick={onRemove}
-                            className="absolute top-2 right-2 z-10 w-6 h-6 bg-black bg-opacity-50 rounded-full flex items-center justify-center text-white hover:bg-opacity-70 transition-all"
+                            onClick={() => !disabled && onRemove()}
+                            disabled={disabled}
+                            className={`absolute top-2 right-2 z-10 w-6 h-6 bg-black bg-opacity-50 rounded-full flex items-center justify-center text-white transition-all ${
+                                disabled ? 'cursor-not-allowed opacity-60' : 'hover:bg-opacity-70'
+                            }`}
                         >
                             ×
                         </button>
@@ -215,7 +225,7 @@ export function PhotoCard({
                         <div
                             ref={innerContainerRef}
                             className={`w-full h-full bg-gray-50 overflow-hidden ${
-                                warningMessage && !isConfirmed ? 'cursor-not-allowed' : 'cursor-pointer'
+                                disabled || (warningMessage && !isConfirmed) ? 'cursor-not-allowed' : 'cursor-pointer'
                             }`}
                             onClick={handleImageClick}
                         >
@@ -263,11 +273,16 @@ export function PhotoCard({
 
                                     {/* 确认按钮 */}
                                     <button
-                                        className="px-2 py-1.5 bg-white text-black rounded-xl text-center text-sm font-medium active:scale-95 transition hover:bg-gray-100"
+                                        className={`px-2 py-1.5 rounded-xl text-center text-sm font-medium active:scale-95 transition ${
+                                            disabled
+                                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                                : 'bg-white text-black hover:bg-gray-100'
+                                        }`}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            onConfirm();
+                                            !disabled && onConfirm();
                                         }}
+                                        disabled={disabled}
                                     >
                                         确认使用
                                     </button>
@@ -280,8 +295,11 @@ export function PhotoCard({
                     <div className="absolute inset-0">
                         {/* 删除按钮 */}
                         <button
-                            onClick={onRemove}
-                            className="absolute top-2 right-2 z-10 w-6 h-6 bg-black bg-opacity-50 rounded-full flex items-center justify-center text-white hover:bg-opacity-70 transition-all"
+                            onClick={() => !disabled && onRemove()}
+                            disabled={disabled}
+                            className={`absolute top-2 right-2 z-10 w-6 h-6 bg-black bg-opacity-50 rounded-full flex items-center justify-center text-white transition-all ${
+                                disabled ? 'cursor-not-allowed opacity-60' : 'hover:bg-opacity-70'
+                            }`}
                         >
                             ×
                         </button>
@@ -289,7 +307,7 @@ export function PhotoCard({
                         {/* 图片 */}
                         <div
                             className={`w-full h-full overflow-hidden ${
-                                warningMessage && !isConfirmed ? 'cursor-not-allowed' : 'cursor-pointer'
+                                disabled || (warningMessage && !isConfirmed) ? 'cursor-not-allowed' : 'cursor-pointer'
                             }`}
                             onClick={handleImageClick}
                         >
@@ -337,11 +355,16 @@ export function PhotoCard({
 
                                     {/* 确认按钮 */}
                                     <button
-                                        className="px-2 py-1.5 bg-white text-black rounded-xl text-center text-sm font-medium active:scale-95 transition hover:bg-gray-100"
+                                        className={`px-2 py-1.5 rounded-xl text-center text-sm font-medium active:scale-95 transition ${
+                                            disabled
+                                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                                : 'bg-white text-black hover:bg-gray-100'
+                                        }`}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            onConfirm();
+                                            !disabled && onConfirm();
                                         }}
+                                        disabled={disabled}
                                     >
                                         确认使用
                                     </button>
@@ -355,9 +378,11 @@ export function PhotoCard({
             {/* 数量调整器 */}
             <div className="mt-2 flex items-center justify-center gap-3 bg-white rounded-full py-2 shadow-sm">
                 <button
-                    onClick={() => onQuantityChange(-1)}
-                    className="w-6 h-6 flex items-center justify-center text-gray-600 hover:text-orange-500"
-                    disabled={photo.quantity <= 1}
+                    onClick={() => !disabled && onQuantityChange(-1)}
+                    className={`w-6 h-6 flex items-center justify-center ${
+                        disabled ? 'text-gray-400 cursor-not-allowed' : 'text-gray-600 hover:text-orange-500'
+                    }`}
+                    disabled={disabled || photo.quantity <= 1}
                 >
                     −
                 </button>
@@ -365,8 +390,11 @@ export function PhotoCard({
                     {photo.quantity}
                 </span>
                 <button
-                    onClick={() => onQuantityChange(1)}
-                    className="w-6 h-6 flex items-center justify-center text-gray-600 hover:text-orange-500"
+                    onClick={() => !disabled && onQuantityChange(1)}
+                    className={`w-6 h-6 flex items-center justify-center ${
+                        disabled ? 'text-gray-400 cursor-not-allowed' : 'text-gray-600 hover:text-orange-500'
+                    }`}
+                    disabled={disabled}
                 >
                     +
                 </button>

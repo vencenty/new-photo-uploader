@@ -20,6 +20,8 @@ import { getPhotoWarning } from './utils/photoValidation';
 import { readExifDate, getFileDateFallback } from './utils/exifReader';
 import { prepareOrderSubmitData, mockSubmitOrder, downloadAllPhotos } from './utils/photoSubmit';
 import { isHeicFile, convertHeicToJpeg } from './utils/heicConverter';
+import { submitOrderToServer, checkServerConnection, SubmitProgressCallback } from './utils/submitApi';
+import { SubmitLoading } from './components/SubmitLoading';
 
 export default function PhotoPrintPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -177,6 +179,9 @@ export default function PhotoPrintPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
     const [downloadProgress, setDownloadProgress] = useState('');
+    const [isUploadSubmitting, setIsUploadSubmitting] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadStep, setUploadStep] = useState('');
 
     const handleDownloadAll = async () => {
         if (photos.length === 0) {
@@ -223,11 +228,22 @@ export default function PhotoPrintPage() {
             return;
         }
 
-        setIsSubmitting(true);
+        // 检查服务器连接
+        setUploadStep('检查服务器连接...');
+        setIsUploadSubmitting(true);
+        setUploadProgress(5);
+
+        // const isServerConnected = await checkServerConnection();
+        // if (!isServerConnected) {
+        //     alert('无法连接到服务器，请检查网络连接或稍后重试');
+        //     setIsUploadSubmitting(false);
+        //     return;
+        // }
 
         try {
-            console.log('🔄 开始准备订单数据...');
-            
+            setUploadStep('正在准备订单数据...');
+            setUploadProgress(10);
+
             // 准备订单数据（包含 canvas 合成水印）
             const orderData = await prepareOrderSubmitData(
                 photos,
@@ -239,16 +255,39 @@ export default function PhotoPrintPage() {
                 shippingFee
             );
 
-            // 模拟提交并打印数据
-            await mockSubmitOrder(orderData);
+            // 提交到服务器的进度回调
+            const progressCallback: SubmitProgressCallback = (step, progress) => {
+                setUploadStep(step);
+                setUploadProgress(progress);
+            };
 
-            alert('订单提交成功！请查看控制台了解详细数据。');
+            // 提交到服务器
+            const result = await submitOrderToServer(orderData, progressCallback);
+
+            if (result.success) {
+                setUploadStep('订单提交成功！');
+                setUploadProgress(100);
+
+                // 短暂延迟显示成功状态
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                alert(`订单提交成功！订单号: ${result.orderId || '未知'}`);
+
+                // 清空照片列表，准备新订单
+                setPhotos([]);
+                setConfirmedPhotos(new Set());
+
+            } else {
+                throw new Error(result.message || '提交失败');
+            }
 
         } catch (error) {
             console.error('订单提交失败:', error);
-            alert('订单提交失败，请重试');
+            alert(`订单提交失败: ${error instanceof Error ? error.message : '未知错误'}`);
         } finally {
-            setIsSubmitting(false);
+            setIsUploadSubmitting(false);
+            setUploadProgress(0);
+            setUploadStep('');
         }
     };
 
@@ -269,13 +308,18 @@ export default function PhotoPrintPage() {
                 <header className="bg-white border-b sticky top-0 z-10">
                     <div className="flex items-center justify-between px-4 py-3">
                         <button
-                            className="text-2xl text-black"
-                            onClick={() => window.history.back()}
+                            className={`text-2xl ${isUploadSubmitting ? 'text-gray-400 cursor-not-allowed' : 'text-black'}`}
+                            onClick={() => !isUploadSubmitting && window.history.back()}
+                            disabled={isUploadSubmitting}
                         >
                             ←
                         </button>
                         <h1 className="text-lg font-medium text-black">田田洗照片</h1>
-                        <button className="text-gray-600 text-sm" onClick={handleClearAll}>
+                        <button
+                            className={`text-sm ${isUploadSubmitting ? 'text-gray-400 cursor-not-allowed' : 'text-gray-600'}`}
+                            onClick={() => !isUploadSubmitting && handleClearAll()}
+                            disabled={isUploadSubmitting}
+                        >
                             清空
                         </button>
                     </div>
@@ -283,10 +327,10 @@ export default function PhotoPrintPage() {
 
                 {/* 规格选择区域 */}
                 <div className="bg-white px-4 py-3 border-b">
-                    <div
-                        className="flex items-center justify-between cursor-pointer"
-                        onClick={() => setShowSizeSelector(true)}
-                    >
+                <div
+                    className={`flex items-center justify-between ${isUploadSubmitting ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                    onClick={() => !isUploadSubmitting && setShowSizeSelector(true)}
+                >
                         <span className="text-sm text-gray-600">规格</span>
                         <div className="flex items-center gap-2">
                             <div className="text-right">
@@ -316,9 +360,9 @@ export default function PhotoPrintPage() {
 
                 {/* 日期水印配置区域 */}
                 <div className="bg-white px-4 py-3 border-b">
-                    <div 
-                        className="flex items-center justify-between cursor-pointer"
-                        onClick={() => setShowWatermarkConfig(!showWatermarkConfig)}
+                    <div
+                        className={`flex items-center justify-between ${isUploadSubmitting ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                        onClick={() => !isUploadSubmitting && setShowWatermarkConfig(!showWatermarkConfig)}
                     >
                         <span className="text-sm text-gray-600">日期水印</span>
                         <div className="flex items-center gap-2">
@@ -496,8 +540,13 @@ export default function PhotoPrintPage() {
                                     items.push(
                                         <div key="add-button" className="flex-1 relative">
                             <button
-                                onClick={handleAddPhoto}
-                                                className="absolute inset-0 bg-white border-2 border-dashed border-gray-300 flex flex-col items-center justify-center hover:border-orange-500 transition-colors"
+                                onClick={() => !isUploadSubmitting && handleAddPhoto()}
+                                disabled={isUploadSubmitting}
+                                                className={`absolute inset-0 bg-white border-2 border-dashed flex flex-col items-center justify-center transition-colors ${
+                                                    isUploadSubmitting
+                                                        ? 'border-gray-200 cursor-not-allowed opacity-60'
+                                                        : 'border-gray-300 hover:border-orange-500'
+                                                }`}
                             >
                                 <div className="text-4xl text-gray-300 mb-2">+</div>
                                 <div className="text-sm text-gray-400">添加照片</div>
@@ -527,13 +576,16 @@ export default function PhotoPrintPage() {
                                             onQuantityChange={(delta) =>
                                                 handleQuantityChange(photo.id, delta)
                                             }
-                                            onConfirm={() => handleConfirmPhoto(photo.id)}
+                                            onConfirm={() => !isUploadSubmitting && handleConfirmPhoto(photo.id)}
                                             onEdit={() => {
-                                                const index = photos.findIndex(p => p.id === photo.id);
-                                                if (index !== -1) {
-                                                    setEditingPhotoIndex(index);
+                                                if (!isUploadSubmitting) {
+                                                    const index = photos.findIndex(p => p.id === photo.id);
+                                                    if (index !== -1) {
+                                                        setEditingPhotoIndex(index);
+                                                    }
                                                 }
                                             }}
+                                            disabled={isUploadSubmitting}
                                         />
                                     );
                                 });
@@ -563,8 +615,8 @@ export default function PhotoPrintPage() {
                     {/* 包邮提示 */}
                     {remainingForFreeShipping > 0 && (
                         <div className="text-sm text-orange-500 mb-2">
-                            满 {FREE_SHIPPING_THRESHOLD} 张包邮，还差 {remainingForFreeShipping}{' '}
-                            张
+                            {/* 满 {FREE_SHIPPING_THRESHOLD} 张包邮，还差 {remainingForFreeShipping}{' '} */}
+                            {/* 张 */}
                         </div>
                     )}
                     {remainingForFreeShipping === 0 && (
@@ -584,12 +636,13 @@ export default function PhotoPrintPage() {
                             <div className="flex items-baseline gap-1">
                                 <span className="text-sm text-gray-500">合计</span>
                                 <span className="text-xl font-bold text-orange-500">
-                                    ¥{total.toFixed(2)}
+                                    {/* ¥{total.toFixed(2)} */}
+                                    {totalQuantity} 张
                                 </span>
                             </div>
-                            <div className="text-xs text-gray-400 mt-1">
-                                共 {totalQuantity} 张 运费 ¥{shippingFee}
-                            </div>
+                            {/* <div className="text-xs text-gray-400 mt-1"> */}
+                                {/* 共 {totalQuantity} 张 运费 ¥{shippingFee} */}
+                            {/* </div> */}
                         </div>
 
                         <div className="flex items-center gap-2">
@@ -610,7 +663,7 @@ export default function PhotoPrintPage() {
                             <button
                                 onClick={handleSubmitOrder}
                                 className="bg-gray-400 cursor-not-allowed text-white px-6 py-3 rounded-full font-medium text-base transition-colors shadow-lg"
-                                disabled={true}
+                                disabled={false}
                                 title="功能开发中"
                             >
                                 提交订单
@@ -655,6 +708,15 @@ export default function PhotoPrintPage() {
                             p.id === oldPhoto.id ? newPhoto : p
                         ));
                     }}
+                />
+            )}
+
+            {/* 上传提交loading遮罩 */}
+            {isUploadSubmitting && (
+                <SubmitLoading
+                    currentStep={uploadStep}
+                    progress={uploadProgress}
+                    canCancel={false} // 提交过程中不允许取消
                 />
             )}
         </>

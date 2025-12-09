@@ -1,3 +1,4 @@
+import { log } from 'console';
 import { OrderSubmitData, PhotoSubmitData } from './photoSubmit';
 
 // API 基础配置

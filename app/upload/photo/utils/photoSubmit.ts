@@ -660,12 +660,27 @@ const addWatermarkToOriginal = async (
 export const processPhotoForDownload = async (
     photo: Photo,
     watermarkConfig: WatermarkConfig,
+    styleType: StyleType,
+    aspectRatio: number,
     onProgress?: (message: string) => void
 ): Promise<Blob> => {
     onProgress?.(`处理照片中...`);
     
-    // 在原图上添加水印
-    let processedBlob = await addWatermarkToOriginal(photo, watermarkConfig);
+    let processedBlob: Blob;
+
+    if (styleType === 'full_bleed') {
+        // 满版：按可视区域合成（包含裁切/位移后）再加水印
+        const { blob } = await composePhotoWithWatermark(
+            photo,
+            watermarkConfig,
+            aspectRatio,
+            'full_bleed'
+        );
+        processedBlob = blob;
+    } else {
+        // 留白等样式：保持原图尺寸直接叠加水印
+        processedBlob = await addWatermarkToOriginal(photo, watermarkConfig);
+    }
     
     // 尝试提取并注入 EXIF
     if (photo.url.startsWith('blob:')) {
@@ -705,6 +720,8 @@ const triggerDownload = (blob: Blob, filename: string): void => {
 export const downloadAllPhotos = async (
     photos: Photo[],
     watermarkConfig: WatermarkConfig,
+    styleType: StyleType,
+    aspectRatio: number,
     onProgress?: (current: number, total: number, message: string) => void
 ): Promise<void> => {
     const total = photos.length;
@@ -717,6 +734,8 @@ export const downloadAllPhotos = async (
             const blob = await processPhotoForDownload(
                 photo, 
                 watermarkConfig,
+                styleType,
+                aspectRatio,
                 (msg) => onProgress?.(i + 1, total, msg)
             );
             

@@ -196,6 +196,8 @@ export default function PhotoPrintPage() {
             await downloadAllPhotos(
                 photos,
                 watermarkConfig,
+                selectedStyle,
+                currentAspectRatio,
                 (current, total, message) => {
                     setDownloadProgress(`${current}/${total}: ${message}`);
                 }

@@ -94,7 +94,6 @@ export const WATERMARK_SIZES: { value: WatermarkSize; label: string; fontSize: n
 export const DATE_FORMATS: { value: DateFormat; label: string; example: string }[] = [
     { value: 'YYYY-MM-DD', label: '年-月-日', example: '2024-01-15' },
     { value: 'YYYY/MM/DD', label: '年/月/日', example: '2024/01/15' },
-    { value: 'YYYY/MM/DD', label: '年/月/日', example: '2024 01 15' },
     { value: 'YYYY MM DD', label: '年 月 日', example: '2024 01 15' },
     // { value: 'MM/DD/YYYY', label: '月/日/年', example: '01/15/2024' },
     // { value: 'DD.MM.YYYY', label: '日.月.年', example: '15.01.2024' },

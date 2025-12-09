@@ -292,8 +292,6 @@ export function PhotoEditor({
     };
 
     const handleTouchMove = (e: React.TouchEvent) => {
-        e.preventDefault();
-        
         if (e.touches.length === 2 && touchStartDistance > 0 && isPinching) {
             // 双指缩放 - 使用 requestAnimationFrame 平滑更新
             const distance = getTouchDistance(e.touches);

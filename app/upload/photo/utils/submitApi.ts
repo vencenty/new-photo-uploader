@@ -5,6 +5,28 @@ import { OrderSubmitData, PhotoSubmitData } from './photoSubmit';
 const API_BASE_URL = 'http://localhost:9898';
 const API_ENDPOINT = '/index.php';
 
+// 工具：对象键转蛇形命名
+const toSnakeCase = (key: string) =>
+    key
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .replace(/-/g, '_')
+        .toLowerCase();
+
+const toSnakeCaseKeys = (value: any): any => {
+    if (value === null || value === undefined) return value;
+    if (Array.isArray(value)) return value.map(v => toSnakeCaseKeys(v));
+    const isFile = typeof File !== 'undefined' && value instanceof File;
+    if (value instanceof Blob || isFile) return value;
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'object') {
+        return Object.keys(value).reduce((acc, key) => {
+            acc[toSnakeCase(key)] = toSnakeCaseKeys((value as any)[key]);
+            return acc;
+        }, {} as Record<string, any>);
+    }
+    return value;
+};
+
 // 提交进度回调类型
 export interface SubmitProgressCallback {
     (step: string, progress: number): void;
@@ -56,12 +78,13 @@ export async function submitOrderToServer(
         // 步骤 3: 提交订单信息
         onProgress('正在提交订单信息...', 85);
 
-        const orderPayload = {
+        // 所有提交字段改为蛇形命名
+        const orderPayload = toSnakeCaseKeys({
             ...orderData.orderInfo,
             watermarkConfig: orderData.watermarkConfig,
             photos: photoResults,
             submitTime: orderData.submitTime,
-        };
+        });
 
         const response = await fetch(`${API_BASE_URL}${API_ENDPOINT}`, {
             method: 'POST',
@@ -105,17 +128,17 @@ async function uploadPhoto(photo: PhotoSubmitData): Promise<{ url: string }> {
     const formData = new FormData();
 
     // 添加照片信息
-    formData.append('photoId', photo.id);
+    formData.append('photo_id', photo.id);
     formData.append('quantity', photo.quantity.toString());
-    formData.append('originalWidth', photo.originalWidth.toString());
-    formData.append('originalHeight', photo.originalHeight.toString());
-    formData.append('autoRotated', photo.autoRotated.toString());
-    formData.append('takenAt', photo.takenAt || '');
+    formData.append('original_width', photo.originalWidth.toString());
+    formData.append('original_height', photo.originalHeight.toString());
+    formData.append('auto_rotated', photo.autoRotated.toString());
+    formData.append('taken_at', photo.takenAt || '');
     formData.append('image', photo.composedImageBlob, `photo_${photo.id}.jpg`);
 
     // 如果是满版样式，添加裁切信息
     if (photo.cropInfo) {
-        formData.append('cropInfo', JSON.stringify(photo.cropInfo));
+        formData.append('crop_info', JSON.stringify(toSnakeCaseKeys(photo.cropInfo)));
     }
 
     const response = await fetch(`${API_BASE_URL}/index.php`, {

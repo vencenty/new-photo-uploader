@@ -23,6 +23,28 @@ import { isHeicFile, convertHeicToJpeg } from './utils/heicConverter';
 import { submitOrderToServer, checkServerConnection, SubmitProgressCallback } from './utils/submitApi';
 import { SubmitLoading } from './components/SubmitLoading';
 
+// 工具：对象键转蛇形命名
+const toSnakeCase = (key: string) =>
+    key
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .replace(/-/g, '_')
+        .toLowerCase();
+
+const toSnakeCaseKeys = (value: any): any => {
+    if (value === null || value === undefined) return value;
+    if (Array.isArray(value)) return value.map(v => toSnakeCaseKeys(v));
+    const isFile = typeof File !== 'undefined' && value instanceof File;
+    if (value instanceof Blob || isFile) return value;
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'object') {
+        return Object.keys(value).reduce((acc, key) => {
+            acc[toSnakeCase(key)] = toSnakeCaseKeys((value as any)[key]);
+            return acc;
+        }, {} as Record<string, any>);
+    }
+    return value;
+};
+
 export default function PhotoPrintPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [photos, setPhotos] = useState<Photo[]>([]);
@@ -258,7 +280,7 @@ export default function PhotoPrintPage() {
             );
 
             // 调试：输出本次提交的全部参数
-            console.log('[订单提交参数]', {
+            const orderParamsSnake = toSnakeCaseKeys({
                 selectedSize,
                 selectedStyle,
                 currentAspectRatio,
@@ -268,6 +290,7 @@ export default function PhotoPrintPage() {
                 photosCount: photos.length,
                 orderData,
             });
+            console.log('[订单提交参数]', orderParamsSnake);
 
             // 提交到服务器的进度回调
             const progressCallback: SubmitProgressCallback = (step, progress) => {

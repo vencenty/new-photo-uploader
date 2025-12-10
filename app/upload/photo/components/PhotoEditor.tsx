@@ -579,7 +579,7 @@ export function PhotoEditor({
                     >
                         ←
                     </button>
-                    <h1 className="text-lg font-medium text-black">一刻相册</h1>
+                    <h1 className="text-lg font-medium text-black">编辑</h1>
                     <button
                         className="bg-black text-white px-6 py-2 rounded-full text-sm font-medium"
                         onClick={handleSave}

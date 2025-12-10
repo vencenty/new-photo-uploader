@@ -257,6 +257,18 @@ export default function PhotoPrintPage() {
                 shippingFee
             );
 
+            // 调试：输出本次提交的全部参数
+            console.log('[订单提交参数]', {
+                selectedSize,
+                selectedStyle,
+                currentAspectRatio,
+                watermarkConfig,
+                pricePerPhoto: PRICE_PER_PHOTO,
+                shippingFee,
+                photosCount: photos.length,
+                orderData,
+            });
+
             // 提交到服务器的进度回调
             const progressCallback: SubmitProgressCallback = (step, progress) => {
                 setUploadStep(step);
@@ -316,7 +328,7 @@ export default function PhotoPrintPage() {
                         >
                             ←
                         </button>
-                        <h1 className="text-lg font-medium text-black">田田洗照片</h1>
+                        <h1 className="text-lg font-medium text-black">测试上传</h1>
                         <button
                             className={`text-sm ${isUploadSubmitting ? 'text-gray-400 cursor-not-allowed' : 'text-gray-600'}`}
                             onClick={() => !isUploadSubmitting && handleClearAll()}

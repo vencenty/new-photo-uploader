@@ -17,7 +17,7 @@ import { PhotoEditor } from './components/PhotoEditor';
 import { SizeSelector } from './components/SizeSelector';
 import { PhotoCard } from './components/PhotoCard';
 import { getPhotoWarning } from './utils/photoValidation';
-import { readExifDate, getFileDateFallback } from './utils/exifReader';
+import { readExifDate } from './utils/exifReader';
 import { prepareOrderSubmitData, mockSubmitOrder, downloadAllPhotos } from './utils/photoSubmit';
 import { isHeicFile, convertHeicToJpeg } from './utils/heicConverter';
 import { submitOrderToServer, checkServerConnection, SubmitProgressCallback } from './utils/submitApi';
@@ -161,9 +161,9 @@ export default function PhotoPrintPage() {
                     readExifDate(file),
                 ]);
 
-                // 如果 EXIF 读取失败，使用文件修改日期作为备选
-                const takenAt = exifDate || getFileDateFallback(file);
-                console.log(`📅 照片日期: ${takenAt} (${exifDate ? 'EXIF' : '文件日期'})`);
+                // 只使用 EXIF 拍摄日期，缺失则为空
+                const takenAt = exifDate;
+                console.log(`📅 照片日期: ${takenAt || '无 EXIF 日期'}`);
 
                 const { width, height } = dimensions;
 

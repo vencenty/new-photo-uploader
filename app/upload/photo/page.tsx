@@ -22,6 +22,7 @@ import { prepareOrderSubmitData, mockSubmitOrder, downloadAllPhotos } from './ut
 import { isHeicFile, convertHeicToJpeg } from './utils/heicConverter';
 import { submitOrderToServer, checkServerConnection, SubmitProgressCallback } from './utils/submitApi';
 import { SubmitLoading } from './components/SubmitLoading';
+import { generateThumbnail } from './utils/thumbnailGenerator';
 
 // 工具：对象键转蛇形命名
 const toSnakeCase = (key: string) =>
@@ -134,51 +135,67 @@ export default function PhotoPrintPage() {
 
             try {
                 let imageBlob: Blob = file;
+                let processedFile: File = file;
                 let wasHeicConverted = false;
 
                 // 如果是 HEIC 文件，先转换为 JPEG
                 if (isHeicFile(file)) {
                     console.log(`🔄 转换 HEIC 文件: ${file.name}`);
+                    
                     imageBlob = await convertHeicToJpeg(file);
                     wasHeicConverted = true;
+                    // 转换后创建新的 File 对象
+                    processedFile = new File([imageBlob], file.name.replace(/\.heic$/i, '.jpg'), {
+                        type: 'image/jpeg',
+                        lastModified: file.lastModified,
+                    });
                     console.log(`✅ HEIC 转换完成: ${file.name}`);
                 }
 
-                const imageUrl = URL.createObjectURL(imageBlob);
-
-                // 并行读取图片尺寸和 EXIF 日期
-                // 注意：EXIF 从原始文件读取（HEIC 转换后会丢失）
-                const [dimensions, exifDate] = await Promise.all([
-                    new Promise<{ width: number; height: number }>((resolve, reject) => {
-                        const img = document.createElement('img');
-                        img.onload = () => {
-                            resolve({ width: img.width, height: img.height });
-                        };
-                        img.onerror = () => reject(new Error('图片加载失败'));
-                        img.src = imageUrl;
-                    }),
-                    // 从原始文件读取 EXIF（包括 HEIC）
-                    readExifDate(file),
-                ]);
-
-                // 只使用 EXIF 拍摄日期，缺失则为空
+                // 从原始文件读取 EXIF（包括 HEIC）
+                const exifDate = await readExifDate(file);
                 const takenAt = exifDate;
                 console.log(`📅 照片日期: ${takenAt || '无 EXIF 日期'}`);
 
-                const { width, height } = dimensions;
+                // 生成缩略图（长边1080）
+                console.log(`🖼️  生成缩略图: ${file.name}`);
+                const { thumbnailUrl, width: thumbnailWidth, height: thumbnailHeight } = 
+                    await generateThumbnail(imageBlob, { maxSize: 1080, quality: 0.9 });
+
+                // 获取原始图片尺寸（从缩略图推算，保持比例）
+                const tempUrl = URL.createObjectURL(imageBlob);
+                const img = document.createElement('img');
+                const originalDimensions = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+                    img.onload = () => {
+                        resolve({ width: img.width, height: img.height });
+                        URL.revokeObjectURL(tempUrl);
+                    };
+                    img.onerror = () => {
+                        URL.revokeObjectURL(tempUrl);
+                        reject(new Error('图片加载失败'));
+                    };
+                    img.src = tempUrl;
+                });
+
+                const { width: originalWidth, height: originalHeight } = originalDimensions;
 
                 // 检测是否为横图（宽度大于高度）
-                const isLandscape = width > height;
+                const isLandscape = originalWidth > originalHeight;
+
+                console.log(`✅ 缩略图生成完成: ${thumbnailWidth}x${thumbnailHeight} (原图: ${originalWidth}x${originalHeight})`);
 
                 const newPhoto: Photo = {
                     id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                    url: imageUrl,
+                    url: thumbnailUrl, // 使用缩略图 URL
                     quantity: 1,
                     fileSize: file.size,
-                    width,
-                    height,
+                    width: originalWidth, // 原始宽度
+                    height: originalHeight, // 原始高度
+                    thumbnailWidth, // 缩略图宽度
+                    thumbnailHeight, // 缩略图高度
                     autoRotated: isLandscape, // 标记横图需要自动旋转
                     takenAt, // 从 EXIF 读取的拍摄日期
+                    originalFile: processedFile, // 保存原始文件引用
                 };
 
                 // 每加载完一张照片就立即添加到列表中

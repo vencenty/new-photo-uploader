@@ -16,7 +16,11 @@ export function calculatePhotoScale(
     styleType: StyleType,
     rotation?: number
 ): number {
-    if (!photo.width || !photo.height) return 1;
+    // 优先使用缩略图尺寸（用于显示），如果没有则使用原图尺寸
+    const width = photo.thumbnailWidth || photo.width;
+    const height = photo.thumbnailHeight || photo.height;
+    
+    if (!width || !height) return 1;
 
     // 判断是否旋转（使用传入的 rotation 或者根据 autoRotated 判断）
     const isRotated = rotation !== undefined 
@@ -24,8 +28,8 @@ export function calculatePhotoScale(
         : (photo.autoRotated && !photo.transform);
 
     // 根据是否旋转，调整图片的实际宽高
-    const actualWidth = isRotated ? photo.height : photo.width;
-    const actualHeight = isRotated ? photo.width : photo.height;
+    const actualWidth = isRotated ? height : width;
+    const actualHeight = isRotated ? width : height;
 
     // 计算图片宽高比（使用旋转后的实际宽高）
     const imageAspectRatio = actualWidth / actualHeight;
@@ -71,7 +75,11 @@ export function calculateDefaultTransform(
     containerHeight: number,
     styleType: StyleType
 ) {
-    if (!photo.width || !photo.height) {
+    // 优先使用缩略图尺寸（用于显示），如果没有则使用原图尺寸
+    const width = photo.thumbnailWidth || photo.width;
+    const height = photo.thumbnailHeight || photo.height;
+    
+    if (!width || !height) {
         return null;
     }
 

@@ -26,14 +26,17 @@ export interface PhotoTransform {
 
 export interface Photo {
     id: string;
-    url: string;
+    url: string; // 缩略图 URL（用于预览和编辑）
     quantity: number;
-    fileSize: number; // 文件大小（字节）
-    width?: number; // 图片宽度（像素）
-    height?: number; // 图片高度（像素）
+    fileSize: number; // 原始文件大小（字节）
+    width?: number; // 原始图片宽度（像素）
+    height?: number; // 原始图片高度（像素）
+    thumbnailWidth?: number; // 缩略图宽度（像素）
+    thumbnailHeight?: number; // 缩略图高度（像素）
     transform?: PhotoTransform; // 编辑后的变换信息
     autoRotated?: boolean; // 是否自动旋转（横图转竖图）
     takenAt?: string; // 照片拍摄日期（从 EXIF 读取）
+    originalFile?: File; // 原始文件引用（用于提交）
 }
 
 // ==================== 水印配置 ====================

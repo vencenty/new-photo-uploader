@@ -159,7 +159,11 @@ export function PhotoCard({
 
     // 当容器尺寸或照片变化时，重新计算缩放后的变换
     useEffect(() => {
-        if (!photo.width || !photo.height) {
+        // 优先使用缩略图尺寸
+        const width = photo.thumbnailWidth || photo.width;
+        const height = photo.thumbnailHeight || photo.height;
+        
+        if (!width || !height) {
             setScaledTransform(null);
             return;
         }
@@ -238,8 +242,8 @@ export function PhotoCard({
                                         className="absolute top-1/2 left-1/2 max-w-none pointer-events-none"
                                         style={{
                                             transform: `translate(-50%, -50%) translate(${scaledTransform.position.x}px, ${scaledTransform.position.y}px) scale(${scaledTransform.scale}) rotate(${scaledTransform.rotation}deg)`,
-                                            width: photo.width ? `${photo.width}px` : 'auto',
-                                            height: photo.height ? `${photo.height}px` : 'auto',
+                                            width: (photo.thumbnailWidth || photo.width) ? `${photo.thumbnailWidth || photo.width}px` : 'auto',
+                                            height: (photo.thumbnailHeight || photo.height) ? `${photo.thumbnailHeight || photo.height}px` : 'auto',
                                         }}
                                         onError={(e) => {
                                             console.error('图片加载失败:', photo.url);
@@ -320,8 +324,8 @@ export function PhotoCard({
                                         className="absolute top-1/2 left-1/2 max-w-none pointer-events-none"
                                         style={{
                                             transform: `translate(-50%, -50%) translate(${scaledTransform.position.x}px, ${scaledTransform.position.y}px) scale(${scaledTransform.scale}) rotate(${scaledTransform.rotation}deg)`,
-                                            width: photo.width ? `${photo.width}px` : 'auto',
-                                            height: photo.height ? `${photo.height}px` : 'auto',
+                                            width: (photo.thumbnailWidth || photo.width) ? `${photo.thumbnailWidth || photo.width}px` : 'auto',
+                                            height: (photo.thumbnailHeight || photo.height) ? `${photo.thumbnailHeight || photo.height}px` : 'auto',
                                         }}
                                         onError={(e) => {
                                             console.error('图片加载失败:', photo.url);

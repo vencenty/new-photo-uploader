@@ -115,13 +115,19 @@ export function PhotoEditor({
 
     // 计算在给定缩放和旋转下的最小缩放比例
     const calculateMinScale = useCallback((rot: number) => {
-        if (!photo?.width || !photo?.height || !containerRef.current) return 1;
+        if (!photo) return 1;
+        
+        // 优先使用缩略图尺寸
+        const width = photo.thumbnailWidth || photo.width;
+        const height = photo.thumbnailHeight || photo.height;
+        
+        if (!width || !height || !containerRef.current) return 1;
 
         const containerWidth = containerRef.current.offsetWidth;
         const containerHeight = containerRef.current.offsetHeight;
 
         // 获取旋转后的边界框
-        const rotatedBounds = getRotatedBounds(photo.width, photo.height, rot);
+        const rotatedBounds = getRotatedBounds(width, height, rot);
         
         // 计算需要的最小缩放比例
         const scaleX = containerWidth / rotatedBounds.width;
@@ -136,14 +142,20 @@ export function PhotoEditor({
 
     // 限制位置
     const constrainPosition = useCallback((pos: { x: number; y: number }, currentScale: number, currentRotation: number) => {
-        if (!photo?.width || !photo?.height || !containerRef.current) return pos;
+        if (!photo || !containerRef.current) return pos;
+        
+        // 优先使用缩略图尺寸
+        const width = photo.thumbnailWidth || photo.width;
+        const height = photo.thumbnailHeight || photo.height;
+        
+        if (!width || !height) return pos;
 
         const containerWidth = containerRef.current.offsetWidth;
         const containerHeight = containerRef.current.offsetHeight;
 
         // 计算缩放后的图片尺寸
-        const scaledWidth = photo.width * currentScale;
-        const scaledHeight = photo.height * currentScale;
+        const scaledWidth = width * currentScale;
+        const scaledHeight = height * currentScale;
 
         // 获取旋转后的边界
         const rotatedBounds = getRotatedBounds(scaledWidth, scaledHeight, currentRotation);
@@ -189,7 +201,13 @@ export function PhotoEditor({
 
     // 初始化图片尺寸
     useEffect(() => {
-        if (!photo?.width || !photo?.height || !containerRef.current) return;
+        if (!photo || !containerRef.current) return;
+        
+        // 优先使用缩略图尺寸
+        const width = photo.thumbnailWidth || photo.width;
+        const height = photo.thumbnailHeight || photo.height;
+        
+        if (!width || !height) return;
 
         const containerWidth = containerRef.current.offsetWidth;
         const containerHeight = containerRef.current.offsetHeight;
@@ -656,8 +674,8 @@ export function PhotoEditor({
                                             style={{
                                                 transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
                                                 transition: isDragging ? 'none' : 'transform 0.3s ease',
-                                                width: photo.width ? `${photo.width}px` : 'auto',
-                                                height: photo.height ? `${photo.height}px` : 'auto',
+                                                width: (photo.thumbnailWidth || photo.width) ? `${photo.thumbnailWidth || photo.width}px` : 'auto',
+                                                height: (photo.thumbnailHeight || photo.height) ? `${photo.thumbnailHeight || photo.height}px` : 'auto',
                                             }}
                                             draggable={false}
                                         />
@@ -692,8 +710,8 @@ export function PhotoEditor({
                                         style={{
                                             transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
                                             transition: isDragging ? 'none' : 'transform 0.3s ease',
-                                            width: photo.width ? `${photo.width}px` : 'auto',
-                                            height: photo.height ? `${photo.height}px` : 'auto',
+                                            width: (photo.thumbnailWidth || photo.width) ? `${photo.thumbnailWidth || photo.width}px` : 'auto',
+                                            height: (photo.thumbnailHeight || photo.height) ? `${photo.thumbnailHeight || photo.height}px` : 'auto',
                                         }}
                                         draggable={false}
                                     />

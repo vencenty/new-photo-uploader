@@ -78,6 +78,25 @@ const loadImage = (url: string): Promise<HTMLImageElement> => {
 };
 
 /**
+ * 从 File 对象加载图片并返回 Image 元素
+ */
+const loadImageFromFile = (file: File | Blob): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            resolve(img);
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error('图片加载失败'));
+        };
+        img.src = url;
+    });
+};
+
+/**
  * 加载 DSEG 字体
  */
 const loadDsegFont = async (): Promise<void> => {
@@ -228,8 +247,10 @@ export const composePhotoWithWatermark = async (
         await loadDsegFont();
     }
     
-    // 加载原图
-    const img = await loadImage(photo.url);
+    // 加载原图（优先使用原始文件，如果没有则使用 URL）
+    const img = photo.originalFile 
+        ? await loadImageFromFile(photo.originalFile)
+        : await loadImage(photo.url);
     
     // 获取原图尺寸
     const imgWidth = img.width;
@@ -621,8 +642,10 @@ const addWatermarkToOriginal = async (
         await loadDsegFont();
     }
     
-    // 加载原图
-    const img = await loadImage(photo.url);
+    // 加载原图（优先使用原始文件，如果没有则使用 URL）
+    const img = photo.originalFile 
+        ? await loadImageFromFile(photo.originalFile)
+        : await loadImage(photo.url);
     
     // 创建与原图相同尺寸的 canvas
     const canvas = document.createElement('canvas');
@@ -682,19 +705,29 @@ export const processPhotoForDownload = async (
         processedBlob = await addWatermarkToOriginal(photo, watermarkConfig);
     }
     
-    // 尝试提取并注入 EXIF
-    if (photo.url.startsWith('blob:')) {
-        try {
-            const originalBuffer = await fetchImageAsArrayBuffer(photo.url);
-            const exifSegment = extractExifSegment(originalBuffer);
-            
-            if (exifSegment) {
-                processedBlob = await injectExifToJpeg(processedBlob, exifSegment);
-                onProgress?.(`已保留 EXIF 信息`);
-            }
-        } catch (error) {
-            console.warn('EXIF 注入失败，使用无 EXIF 版本:', error);
+    // 尝试提取并注入 EXIF（优先从原始文件）
+    try {
+        let originalBuffer: ArrayBuffer;
+        
+        if (photo.originalFile) {
+            // 从原始文件读取
+            originalBuffer = await photo.originalFile.arrayBuffer();
+        } else if (photo.url.startsWith('blob:')) {
+            // 从 blob URL 读取（兼容旧数据）
+            originalBuffer = await fetchImageAsArrayBuffer(photo.url);
+        } else {
+            // 其他情况跳过
+            return processedBlob;
         }
+        
+        const exifSegment = extractExifSegment(originalBuffer);
+        
+        if (exifSegment) {
+            processedBlob = await injectExifToJpeg(processedBlob, exifSegment);
+            onProgress?.(`已保留 EXIF 信息`);
+        }
+    } catch (error) {
+        console.warn('EXIF 注入失败，使用无 EXIF 版本:', error);
     }
     
     return processedBlob;

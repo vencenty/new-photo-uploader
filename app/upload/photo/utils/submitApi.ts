@@ -1,9 +1,19 @@
 import { log } from 'console';
 import { OrderSubmitData, PhotoSubmitData } from './photoSubmit';
+import { MAX_CONCURRENT_UPLOADS } from '../config/uploadConfig';
 
 // API 基础配置
-const API_BASE_URL = 'http://localhost:9898';
-const API_ENDPOINT = '/index.php';
+const API_BASE_URL = 'http://localhost:8888';
+const PHOTO_UPLOAD_ENDPOINT = '/api/photo/upload';
+const ORDER_SUBMIT_ENDPOINT = '/api/photo/submit';
+
+// 上传响应类型
+export interface UploadResponse {
+    filename: string;
+    size: number;
+    sha1: string;
+    url: string;
+}
 
 // 工具：对象键转蛇形命名
 const toSnakeCase = (key: string) =>
@@ -36,6 +46,7 @@ export interface SubmitProgressCallback {
 export interface SubmitResult {
     success: boolean;
     orderId?: string;
+    orderSn?: string;
     message?: string;
 }
 
@@ -43,50 +54,46 @@ export interface SubmitResult {
  * 提交订单到服务器
  */
 export async function submitOrderToServer(
-    orderData: OrderSubmitData,
+    photos: Photo[], // 使用原始的Photo数组，包含photoUrl
+    watermarkConfig: any,
+    orderInfo: any,
     onProgress: SubmitProgressCallback
 ): Promise<SubmitResult> {
     try {
-        // 步骤 1: 准备数据
-        onProgress('正在准备订单数据...', 10);
+        // 前端生成纯数字 order_sn
+        const orderSn = generateOrderSn();
 
-        // 步骤 2: 上传照片（逐个上传以显示进度）
-        const photoResults: Array<{ id: string; url: string }> = [];
-        const totalPhotos = orderData.photos.length;
+        // 步骤 1: 验证所有照片都有photoUrl
+        onProgress('正在验证照片...', 10);
 
-        for (let i = 0; i < totalPhotos; i++) {
-            const photo = orderData.photos[i];
-            const progress = 20 + (i / totalPhotos) * 60; // 20%-80%
-
-            onProgress(`正在上传第 ${i + 1}/${totalPhotos} 张照片...`, progress);
-
-            try {
-                const photoResult = await uploadPhoto(photo);
-                photoResults.push({
-                    id: photo.id,
-                    url: photoResult.url,
-                });
-            } catch (error) {
-                console.error(`照片 ${photo.id} 上传失败:`, error);
-                throw new Error(`照片 ${i + 1} 上传失败，请重试`);
-            }
-
-            // 短暂延迟避免服务器过载
-            await new Promise(resolve => setTimeout(resolve, 200));
+        const photosWithUrl = photos.filter(photo => photo.photoUrl);
+        if (photosWithUrl.length !== photos.length) {
+            const missingCount = photos.length - photosWithUrl.length;
+            throw new Error(`${missingCount} 张照片未上传成功，请重新选择照片`);
         }
 
-        // 步骤 3: 提交订单信息
-        onProgress('正在提交订单信息...', 85);
+        // 步骤 2: 准备订单数据
+        onProgress('正在准备订单数据...', 20);
+
+        // 构建照片信息数组
+        const photoInfos = photosWithUrl.map(photo => ({
+            id: photo.id,
+            url: photo.photoUrl!, // 使用之前上传的URL
+        }));
 
         // 所有提交字段改为蛇形命名
         const orderPayload = toSnakeCaseKeys({
-            ...orderData.orderInfo,
-            watermarkConfig: orderData.watermarkConfig,
-            photos: photoResults,
-            submitTime: orderData.submitTime,
+            ...orderInfo,
+            watermarkConfig: watermarkConfig,
+            photos: photoInfos,
+            submitTime: new Date().toISOString(),
+            orderSn,
         });
 
-        const response = await fetch(`${API_BASE_URL}${API_ENDPOINT}`, {
+        // 步骤 3: 提交订单信息
+        onProgress('正在提交订单信息...', 50);
+
+        const response = await fetch(`${API_BASE_URL}${ORDER_SUBMIT_ENDPOINT}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -109,6 +116,7 @@ export async function submitOrderToServer(
         return {
             success: true,
             orderId: result.orderId,
+            orderSn: result.orderSn ?? orderSn,
             message: result.message,
         };
 
@@ -122,6 +130,47 @@ export async function submitOrderToServer(
 }
 
 /**
+ * 上传单个文件用于预览
+ */
+export async function uploadFileForPreview(
+    file: File,
+    photoId: string,
+    originalWidth?: number,
+    originalHeight?: number,
+    autoRotated?: boolean,
+    takenAt?: string
+): Promise<UploadResponse> {
+    const formData = new FormData();
+
+    // 添加照片信息
+    formData.append('photo_id', photoId);
+    formData.append('quantity', '1'); // 预览时默认数量为1
+    formData.append('original_width', (originalWidth || 0).toString());
+    formData.append('original_height', (originalHeight || 0).toString());
+    formData.append('auto_rotated', (autoRotated || false).toString());
+    formData.append('taken_at', takenAt || new Date().toISOString().split('T')[0]);
+    formData.append('image', file, `photo_${photoId}.jpg`);
+
+    const response = await fetch(`${API_BASE_URL}${PHOTO_UPLOAD_ENDPOINT}`, {
+        method: 'POST',
+        body: formData,
+    });
+
+    if (!response.ok) {
+        throw new Error(`照片上传失败: ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    // 检查响应格式
+    if (result.code !== 0) {
+        throw new Error(result.msg || '上传失败');
+    }
+
+    return result.data;
+}
+
+/**
  * 上传单张照片
  */
 async function uploadPhoto(photo: PhotoSubmitData): Promise<{ url: string }> {
@@ -130,10 +179,10 @@ async function uploadPhoto(photo: PhotoSubmitData): Promise<{ url: string }> {
     // 添加照片信息
     formData.append('photo_id', photo.id);
     formData.append('quantity', photo.quantity.toString());
-    formData.append('original_width', photo.originalWidth.toString());
-    formData.append('original_height', photo.originalHeight.toString());
-    formData.append('auto_rotated', photo.autoRotated.toString());
-    formData.append('taken_at', photo.takenAt || '');
+    formData.append('original_width', (photo.originalWidth || 0).toString());
+    formData.append('original_height', (photo.originalHeight || 0).toString());
+    formData.append('auto_rotated', (photo.autoRotated || false).toString());
+    formData.append('taken_at', photo.takenAt || new Date().toISOString().split('T')[0]);
     formData.append('image', photo.composedImageBlob, `photo_${photo.id}.jpg`);
 
     // 如果是满版样式，添加裁切信息
@@ -141,7 +190,7 @@ async function uploadPhoto(photo: PhotoSubmitData): Promise<{ url: string }> {
         formData.append('crop_info', JSON.stringify(toSnakeCaseKeys(photo.cropInfo)));
     }
 
-    const response = await fetch(`${API_BASE_URL}/index.php`, {
+    const response = await fetch(`${API_BASE_URL}${PHOTO_UPLOAD_ENDPOINT}`, {
         method: 'POST',
         body: formData,
     });
@@ -151,6 +200,56 @@ async function uploadPhoto(photo: PhotoSubmitData): Promise<{ url: string }> {
     }
 
     return await response.json();
+}
+
+/**
+ * 并发受限上传所有照片
+ */
+async function uploadPhotosWithLimit(
+    photos: PhotoSubmitData[],
+    concurrency: number,
+    onProgress: SubmitProgressCallback
+): Promise<Array<{ id: string; url: string }>> {
+    if (photos.length === 0) return [];
+    const total = photos.length;
+    const limit = Math.max(1, concurrency || 1);
+    const results: Array<{ id: string; url: string }> = new Array(total);
+    let completed = 0;
+    let cursor = 0;
+
+    const runNext = async (): Promise<void> => {
+        const current = cursor++;
+        if (current >= total) return;
+        const photo = photos[current];
+        try {
+            const res = await uploadPhoto(photo);
+            results[current] = { id: photo.id, url: res.url };
+            completed += 1;
+            const progress = 20 + (completed / total) * 60; // 20%-80%
+            onProgress(`正在上传第 ${completed}/${total} 张照片...`, progress);
+        } catch (err) {
+            throw err;
+        }
+        if (cursor < total) {
+            await runNext();
+        }
+    };
+
+    const workers: Promise<void>[] = [];
+    const workerCount = Math.min(limit, total);
+    for (let i = 0; i < workerCount; i++) {
+        workers.push(runNext());
+    }
+    await Promise.all(workers);
+    return results;
+}
+
+function generateOrderSn(): string {
+    const ts = Date.now().toString();
+    const rand = Math.floor(Math.random() * 10000)
+        .toString()
+        .padStart(4, '0');
+    return `${ts}${rand}`;
 }
 
 /**

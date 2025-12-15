@@ -18,9 +18,9 @@ import { SizeSelector } from './components/SizeSelector';
 import { PhotoCard } from './components/PhotoCard';
 import { getPhotoWarning } from './utils/photoValidation';
 import { readExifDate } from './utils/exifReader';
-import { prepareOrderSubmitData, mockSubmitOrder, downloadAllPhotos } from './utils/photoSubmit';
+import { mockSubmitOrder, downloadAllPhotos } from './utils/photoSubmit';
 import { isHeicFile, convertHeicToJpeg } from './utils/heicConverter';
-import { submitOrderToServer, checkServerConnection, SubmitProgressCallback } from './utils/submitApi';
+import { submitOrderToServer, checkServerConnection, SubmitProgressCallback, uploadFileForPreview } from './utils/submitApi';
 import { SubmitLoading } from './components/SubmitLoading';
 import { generateThumbnail } from './utils/thumbnailGenerator';
 
@@ -184,9 +184,33 @@ export default function PhotoPrintPage() {
 
                 console.log(`✅ 缩略图生成完成: ${thumbnailWidth}x${thumbnailHeight} (原图: ${originalWidth}x${originalHeight})`);
 
+                // 生成唯一的photoId
+                const photoId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+                // 上传原图到服务器
+                console.log(`📤 上传原图到服务器: ${file.name}`);
+                let photoUrl: string | undefined;
+                try {
+                    const uploadResult = await uploadFileForPreview(
+                        processedFile, // 使用处理后的文件（JPEG格式）
+                        photoId,
+                        originalWidth,
+                        originalHeight,
+                        isLandscape,
+                        takenAt
+                    );
+                    photoUrl = uploadResult.url;
+                    console.log(`✅ 原图上传成功: ${photoUrl}`);
+                } catch (uploadError) {
+                    console.error(`❌ 原图上传失败:`, uploadError);
+                    // 上传失败时继续处理，但不中断流程
+                    // photoUrl 保持 undefined
+                }
+
                 const newPhoto: Photo = {
-                    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                    url: thumbnailUrl, // 使用缩略图 URL
+                    id: photoId,
+                    url: thumbnailUrl, // 使用缩略图 URL 用于预览
+                    photoUrl, // 服务器返回的原图URL
                     quantity: 1,
                     fileSize: file.size,
                     width: originalWidth, // 原始宽度
@@ -282,32 +306,26 @@ export default function PhotoPrintPage() {
         // }
 
         try {
-            setUploadStep('正在准备订单数据...');
+            setUploadStep('正在验证照片...');
             setUploadProgress(10);
 
-            // 准备订单数据（包含 canvas 合成水印）
-            const orderData = await prepareOrderSubmitData(
-                photos,
-                selectedSize,
-                selectedStyle,
-                currentAspectRatio,
-                watermarkConfig,
-                PRICE_PER_PHOTO,
-                shippingFee
-            );
+            // 构建订单信息
+            const orderInfo = {
+                size: selectedSize,
+                style: selectedStyle,
+                aspectRatio: currentAspectRatio,
+                subtotal: subtotal,
+                shippingFee: shippingFee,
+                total: total,
+                totalQuantity: totalQuantity,
+            };
 
             // 调试：输出本次提交的全部参数
-            const orderParamsSnake = toSnakeCaseKeys({
-                selectedSize,
-                selectedStyle,
-                currentAspectRatio,
+            console.log('[订单提交参数]', {
+                photos: photos.map(p => ({ id: p.id, photoUrl: p.photoUrl })),
                 watermarkConfig,
-                pricePerPhoto: PRICE_PER_PHOTO,
-                shippingFee,
-                photosCount: photos.length,
-                orderData,
+                orderInfo,
             });
-            console.log('[订单提交参数]', orderParamsSnake);
 
             // 提交到服务器的进度回调
             const progressCallback: SubmitProgressCallback = (step, progress) => {
@@ -316,7 +334,7 @@ export default function PhotoPrintPage() {
             };
 
             // 提交到服务器
-            const result = await submitOrderToServer(orderData, progressCallback);
+            const result = await submitOrderToServer(photos, watermarkConfig, orderInfo, progressCallback);
 
             if (result.success) {
                 setUploadStep('订单提交成功！');

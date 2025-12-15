@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { 
     Photo, 
     PhotoSize, 
@@ -57,6 +57,11 @@ export default function PhotoPrintPage() {
     const [watermarkConfig, setWatermarkConfig] = useState<WatermarkConfig>(DEFAULT_WATERMARK_CONFIG);
     const [showWatermarkConfig, setShowWatermarkConfig] = useState(false);
 
+    // 异步上传管理
+    const [uploadQueue, setUploadQueue] = useState<Array<{id: string, file: File}>>([]);
+    const [uploadingCount, setUploadingCount] = useState(0);
+    const MAX_CONCURRENT_UPLOADS = 3;
+
     const PRICE_PER_PHOTO = 3.5;
     const SHIPPING_FEE = 6;
     const FREE_SHIPPING_THRESHOLD = 20;
@@ -70,6 +75,82 @@ export default function PhotoPrintPage() {
     // 获取当前选择的宽高比
     const currentAspectRatio =
         PHOTO_SIZES.find((s) => s.size === selectedSize)?.aspectRatio || 7 / 10;
+
+    // 异步上传照片
+    const uploadPhotoAsync = useCallback(async (photoId: string, file: File) => {
+        try {
+            console.log(`📤 开始异步上传: ${file.name} (${photoId})`);
+
+            const uploadResult = await uploadFileForPreview(file);
+
+            // 更新photo的photoUrl
+            setPhotos(prevPhotos =>
+                prevPhotos.map(photo =>
+                    photo.id === photoId
+                        ? { ...photo, photoUrl: uploadResult.url }
+                        : photo
+                )
+            );
+
+            console.log(`✅ 异步上传成功: ${photoId} -> ${uploadResult.url}`);
+        } catch (uploadError) {
+            console.error(`❌ 异步上传失败: ${photoId}`, uploadError);
+            // 上传失败时标记为错误状态，不再重试
+            setPhotos(prevPhotos =>
+                prevPhotos.map(photo =>
+                    photo.id === photoId
+                        ? { ...photo, photoUrl: 'error' } // 标记上传失败，停止重试
+                        : photo
+                )
+            );
+        }
+    }, []);
+
+    // 处理上传队列 - 简化逻辑，避免无限重试
+    const processUploadQueue = useCallback(async () => {
+        if (uploadingCount >= MAX_CONCURRENT_UPLOADS || uploadQueue.length === 0) {
+            return;
+        }
+
+        const itemsToUpload = uploadQueue.slice(0, MAX_CONCURRENT_UPLOADS - uploadingCount);
+        setUploadingCount(prev => prev + itemsToUpload.length);
+
+        // 并发上传 - 每个任务独立处理，不会相互影响
+        const uploadPromises = itemsToUpload.map(async (item) => {
+            await uploadPhotoAsync(item.id, item.file);
+        });
+
+        // 等待这一批上传完成（无论成功或失败）
+        await Promise.allSettled(uploadPromises);
+
+        // 从队列中移除已处理的项（无论成功还是失败，都不再重试）
+        setUploadQueue(prev => prev.slice(itemsToUpload.length));
+        setUploadingCount(prev => prev - itemsToUpload.length);
+    }, [uploadingCount, uploadQueue.length, uploadPhotoAsync]); // 保留必要的依赖
+
+    // 添加到上传队列 - 只添加一次，不重复添加
+    const addToUploadQueue = useCallback((photoId: string, file: File) => {
+        setUploadQueue(prev => {
+            // 检查是否已经存在相同的photoId，避免重复添加
+            const exists = prev.some(item => item.id === photoId);
+            if (exists) {
+                console.warn(`照片 ${photoId} 已经在上传队列中，跳过重复添加`);
+                return prev;
+            }
+            return [...prev, { id: photoId, file }];
+        });
+    }, []);
+
+    // 当上传队列更新时，触发处理 - 简化依赖项
+    useEffect(() => {
+        if (uploadQueue.length > 0 && uploadingCount < MAX_CONCURRENT_UPLOADS) {
+            // 使用setTimeout避免在render过程中调用异步函数
+            const timer = setTimeout(() => {
+                processUploadQueue();
+            }, 0);
+            return () => clearTimeout(timer);
+        }
+    }, [uploadQueue.length, uploadingCount]); // 只依赖length和count，避免函数引用变化导致的重复触发
 
     // 计算照片容器的样式（基于宽高比）
     const getPhotoContainerStyle = () => {
@@ -187,25 +268,10 @@ export default function PhotoPrintPage() {
                 // 生成唯一的photoId
                 const photoId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-                // 上传原图到服务器
-                console.log(`📤 上传原图到服务器: ${file.name}`);
-                let photoUrl: string | undefined;
-                try {
-                    const uploadResult = await uploadFileForPreview(
-                        processedFile // 只传递文件，根据API文档只需要file和可选的prefix
-                    );
-                    photoUrl = uploadResult.url;
-                    console.log(`✅ 原图上传成功: ${photoUrl}`);
-                } catch (uploadError) {
-                    console.error(`❌ 原图上传失败:`, uploadError);
-                    // 上传失败时继续处理，但不中断流程
-                    // photoUrl 保持 undefined
-                }
-
                 const newPhoto: Photo = {
                     id: photoId,
                     url: thumbnailUrl, // 使用缩略图 URL 用于预览
-                    photoUrl, // 服务器返回的原图URL
+                    photoUrl: undefined, // 初始时为undefined，后续异步上传完成后更新
                     quantity: 1,
                     fileSize: file.size,
                     width: originalWidth, // 原始宽度
@@ -217,8 +283,14 @@ export default function PhotoPrintPage() {
                     originalFile: processedFile, // 保存原始文件引用
                 };
 
-                // 每加载完一张照片就立即添加到列表中
+                // 立即添加到列表中显示缩略图
                 setPhotos((prevPhotos) => [...prevPhotos, newPhoto]);
+
+                // 添加到上传队列（异步上传，不阻塞UI）
+                // 只有当照片还没有开始上传时才添加到队列
+                if (newPhoto.photoUrl === undefined) {
+                    addToUploadQueue(newPhoto.id, processedFile);
+                }
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : '未知错误';
                 errors.push(`${file.name}: ${errorMessage}`);

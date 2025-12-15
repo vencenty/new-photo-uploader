@@ -27,7 +27,7 @@ export interface PhotoTransform {
 export interface Photo {
     id: string;
     url: string; // 缩略图 URL（用于预览和编辑）
-    photoUrl?: string; // 上传后的原图URL
+    photoUrl?: string; // 上传后的原图URL ('error'表示上传失败)
     quantity: number;
     fileSize: number; // 原始文件大小（字节）
     width?: number; // 原始图片宽度（像素）

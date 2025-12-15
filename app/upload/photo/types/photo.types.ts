@@ -24,10 +24,15 @@ export interface PhotoTransform {
     containerHeight: number; // 保存时编辑器容器的高度
 }
 
+/** 上传状态类型 */
+export type UploadStatus = 'pending' | 'uploading' | 'success' | 'error';
+
 export interface Photo {
     id: string;
     url: string; // 缩略图 URL（用于预览和编辑）
     photoUrl?: string; // 上传后的原图URL ('error'表示上传失败)
+    uploadStatus?: UploadStatus; // 上传状态
+    retryCount?: number; // 重试次数
     quantity: number;
     fileSize: number; // 原始文件大小（字节）
     width?: number; // 原始图片宽度（像素）

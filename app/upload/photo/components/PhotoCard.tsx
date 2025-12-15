@@ -107,6 +107,62 @@ export function PhotoCard({
         return rotatedPositionMap[position] || position;
     };
 
+    // 渲染上传状态指示器
+    const renderUploadStatus = () => {
+        if (photo.uploadStatus === 'pending') {
+            // 等待上传
+            return (
+                <div className="flex items-center gap-1 bg-gray-500 bg-opacity-80 text-white text-xs px-2 py-1 rounded-full">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>等待中</span>
+                </div>
+            );
+        } else if (photo.uploadStatus === 'uploading') {
+            // 正在上传
+            return (
+                <div className="flex items-center gap-1 bg-blue-500 bg-opacity-80 text-white text-xs px-2 py-1 rounded-full">
+                    <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>上传中</span>
+                </div>
+            );
+        } else if (photo.uploadStatus === 'error') {
+            // 上传失败 - 重试中
+            return (
+                <div className="flex items-center gap-1 bg-red-500 bg-opacity-80 text-white text-xs px-2 py-1 rounded-full">
+                    <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>重试中{photo.retryCount ? ` (${photo.retryCount}/3)` : ''}</span>
+                </div>
+            );
+        } else if (photo.uploadStatus === 'success') {
+            // 上传成功
+            return (
+                <div className="flex items-center gap-1 bg-green-500 bg-opacity-80 text-white text-xs px-2 py-1 rounded-full">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>已上传</span>
+                </div>
+            );
+        } else if (photo.photoUrl === 'failed') {
+            // 最终失败
+            return (
+                <div className="flex items-center gap-1 bg-red-600 bg-opacity-90 text-white text-xs px-2 py-1 rounded-full">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    <span>失败</span>
+                </div>
+            );
+        }
+        return null;
+    };
+
     // 渲染水印
     const renderWatermark = () => {
         // 如果水印未启用或照片没有拍摄日期，不渲染
@@ -227,31 +283,7 @@ export function PhotoCard({
 
                         {/* 上传状态指示器 */}
                         <div className="absolute top-2 left-2 z-10 flex items-center gap-1">
-                            {photo.photoUrl === undefined ? (
-                                // 正在上传
-                                <div className="flex items-center gap-1 bg-blue-500 bg-opacity-80 text-white text-xs px-2 py-1 rounded-full">
-                                    <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg>
-                                    <span>上传中</span>
-                                </div>
-                            ) : photo.photoUrl === 'error' ? (
-                                // 上传失败
-                                <div className="flex items-center gap-1 bg-red-500 bg-opacity-80 text-white text-xs px-2 py-1 rounded-full">
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                                    </svg>
-                                    <span>上传失败</span>
-                                </div>
-                            ) : (
-                                // 上传成功
-                                <div className="flex items-center gap-1 bg-green-500 bg-opacity-80 text-white text-xs px-2 py-1 rounded-full">
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                    <span>已上传</span>
-                                </div>
-                            )}
+                            {renderUploadStatus()}
                         </div>
 
                         {/* 图片区域 */}
@@ -339,31 +371,7 @@ export function PhotoCard({
 
                         {/* 上传状态指示器 */}
                         <div className="absolute top-2 left-2 z-10 flex items-center gap-1">
-                            {photo.photoUrl === undefined ? (
-                                // 正在上传
-                                <div className="flex items-center gap-1 bg-blue-500 bg-opacity-80 text-white text-xs px-2 py-1 rounded-full">
-                                    <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg>
-                                    <span>上传中</span>
-                                </div>
-                            ) : photo.photoUrl === 'error' ? (
-                                // 上传失败
-                                <div className="flex items-center gap-1 bg-red-500 bg-opacity-80 text-white text-xs px-2 py-1 rounded-full">
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                                    </svg>
-                                    <span>上传失败</span>
-                                </div>
-                            ) : (
-                                // 上传成功
-                                <div className="flex items-center gap-1 bg-green-500 bg-opacity-80 text-white text-xs px-2 py-1 rounded-full">
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                    <span>已上传</span>
-                                </div>
-                            )}
+                            {renderUploadStatus()}
                         </div>
 
                         {/* 图片 */}

@@ -57,9 +57,11 @@ export default function PhotoPrintPage() {
     const [watermarkConfig, setWatermarkConfig] = useState<WatermarkConfig>(DEFAULT_WATERMARK_CONFIG);
     const [showWatermarkConfig, setShowWatermarkConfig] = useState(false);
 
-    // 异步上传管理
-    const [uploadQueue, setUploadQueue] = useState<Array<{id: string, file: File}>>([]);
-    const [uploadingCount, setUploadingCount] = useState(0);
+    // 异步上传管理 - 使用ref存储队列避免state异步更新问题
+    const uploadQueueRef = useRef<Array<{id: string, file: File}>>([]);
+    const [uploadQueueLength, setUploadQueueLength] = useState(0); // 用于UI显示队列长度
+    const uploadingCountRef = useRef(0);
+    const [uploadingCount, setUploadingCount] = useState(0); // 用于UI显示
     const MAX_CONCURRENT_UPLOADS = 3;
 
     const PRICE_PER_PHOTO = 3.5;
@@ -76,10 +78,10 @@ export default function PhotoPrintPage() {
     const currentAspectRatio =
         PHOTO_SIZES.find((s) => s.size === selectedSize)?.aspectRatio || 7 / 10;
 
-    // 异步上传照片
-    const uploadPhotoAsync = useCallback(async (photoId: string, file: File) => {
+    // 执行单个上传任务
+    const executeUpload = useCallback(async (photoId: string, file: File): Promise<void> => {
         try {
-            console.log(`📤 开始异步上传: ${file.name} (${photoId})`);
+            console.log(`📤 开始上传: ${file.name} (${photoId}), 当前并发数: ${uploadingCountRef.current}`);
 
             const uploadResult = await uploadFileForPreview(file);
 
@@ -92,65 +94,78 @@ export default function PhotoPrintPage() {
                 )
             );
 
-            console.log(`✅ 异步上传成功: ${photoId} -> ${uploadResult.url}`);
+            console.log(`✅ 上传成功: ${photoId} -> ${uploadResult.url}`);
         } catch (uploadError) {
-            console.error(`❌ 异步上传失败: ${photoId}`, uploadError);
+            console.error(`❌ 上传失败: ${photoId}`, uploadError);
             // 上传失败时标记为错误状态，不再重试
             setPhotos(prevPhotos =>
                 prevPhotos.map(photo =>
                     photo.id === photoId
-                        ? { ...photo, photoUrl: 'error' } // 标记上传失败，停止重试
+                        ? { ...photo, photoUrl: 'error' }
                         : photo
                 )
             );
         }
     }, []);
 
-    // 处理上传队列 - 简化逻辑，避免无限重试
-    const processUploadQueue = useCallback(async () => {
-        if (uploadingCount >= MAX_CONCURRENT_UPLOADS || uploadQueue.length === 0) {
+    // 尝试启动下一个上传任务
+    const tryStartNextUpload = useCallback(() => {
+        // 检查是否可以启动新的上传
+        if (uploadingCountRef.current >= MAX_CONCURRENT_UPLOADS) {
+            console.log(`⏸️ 已达到最大并发数 ${MAX_CONCURRENT_UPLOADS}，等待中...`);
             return;
         }
 
-        const itemsToUpload = uploadQueue.slice(0, MAX_CONCURRENT_UPLOADS - uploadingCount);
-        setUploadingCount(prev => prev + itemsToUpload.length);
+        // 从队列取出一个任务
+        if (uploadQueueRef.current.length === 0) {
+            console.log(`📭 队列为空，无需上传`);
+            return;
+        }
 
-        // 并发上传 - 每个任务独立处理，不会相互影响
-        const uploadPromises = itemsToUpload.map(async (item) => {
-            await uploadPhotoAsync(item.id, item.file);
+        const itemToUpload = uploadQueueRef.current.shift()!;
+        setUploadQueueLength(uploadQueueRef.current.length);
+
+        // 增加上传计数
+        uploadingCountRef.current += 1;
+        setUploadingCount(uploadingCountRef.current);
+
+        console.log(`🚀 启动上传: ${itemToUpload.id}, 队列剩余: ${uploadQueueRef.current.length}, 并发数: ${uploadingCountRef.current}`);
+
+        // 启动上传（不等待完成）
+        executeUpload(itemToUpload.id, itemToUpload.file).finally(() => {
+            // 上传完成后减少计数
+            uploadingCountRef.current -= 1;
+            setUploadingCount(uploadingCountRef.current);
+            
+            console.log(`🔄 上传完成，并发数: ${uploadingCountRef.current}, 队列剩余: ${uploadQueueRef.current.length}`);
+            
+            // 立即尝试启动下一个上传
+            tryStartNextUpload();
         });
 
-        // 等待这一批上传完成（无论成功或失败）
-        await Promise.allSettled(uploadPromises);
-
-        // 从队列中移除已处理的项（无论成功还是失败，都不再重试）
-        setUploadQueue(prev => prev.slice(itemsToUpload.length));
-        setUploadingCount(prev => prev - itemsToUpload.length);
-    }, [uploadingCount, uploadQueue.length, uploadPhotoAsync]); // 保留必要的依赖
+        // 如果还有空闲槽位，继续启动
+        if (uploadingCountRef.current < MAX_CONCURRENT_UPLOADS && uploadQueueRef.current.length > 0) {
+            tryStartNextUpload();
+        }
+    }, [executeUpload]);
 
     // 添加到上传队列 - 只添加一次，不重复添加
     const addToUploadQueue = useCallback((photoId: string, file: File) => {
-        setUploadQueue(prev => {
-            // 检查是否已经存在相同的photoId，避免重复添加
-            const exists = prev.some(item => item.id === photoId);
-            if (exists) {
-                console.warn(`照片 ${photoId} 已经在上传队列中，跳过重复添加`);
-                return prev;
-            }
-            return [...prev, { id: photoId, file }];
-        });
-    }, []);
-
-    // 当上传队列更新时，触发处理 - 简化依赖项
-    useEffect(() => {
-        if (uploadQueue.length > 0 && uploadingCount < MAX_CONCURRENT_UPLOADS) {
-            // 使用setTimeout避免在render过程中调用异步函数
-            const timer = setTimeout(() => {
-                processUploadQueue();
-            }, 0);
-            return () => clearTimeout(timer);
+        // 检查是否已经存在相同的photoId，避免重复添加
+        const exists = uploadQueueRef.current.some(item => item.id === photoId);
+        if (exists) {
+            console.warn(`照片 ${photoId} 已经在上传队列中，跳过重复添加`);
+            return;
         }
-    }, [uploadQueue.length, uploadingCount]); // 只依赖length和count，避免函数引用变化导致的重复触发
+        
+        uploadQueueRef.current.push({ id: photoId, file });
+        setUploadQueueLength(uploadQueueRef.current.length);
+        
+        console.log(`➕ 添加到上传队列: ${photoId}, 队列长度: ${uploadQueueRef.current.length}`);
+        
+        // 立即尝试启动上传
+        tryStartNextUpload();
+    }, [tryStartNextUpload]);
 
     // 计算照片容器的样式（基于宽高比）
     const getPhotoContainerStyle = () => {

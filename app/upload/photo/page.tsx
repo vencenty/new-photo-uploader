@@ -192,12 +192,7 @@ export default function PhotoPrintPage() {
                 let photoUrl: string | undefined;
                 try {
                     const uploadResult = await uploadFileForPreview(
-                        processedFile, // 使用处理后的文件（JPEG格式）
-                        photoId,
-                        originalWidth,
-                        originalHeight,
-                        isLandscape,
-                        takenAt
+                        processedFile // 只传递文件，根据API文档只需要file和可选的prefix
                     );
                     photoUrl = uploadResult.url;
                     console.log(`✅ 原图上传成功: ${photoUrl}`);

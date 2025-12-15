@@ -79,6 +79,7 @@ export async function submitOrderToServer(
         const photoInfos = photosWithUrl.map(photo => ({
             id: photo.id,
             url: photo.photoUrl!, // 使用之前上传的URL
+            transform: photo.transform, // 包含编辑变换信息
         }));
 
         // 所有提交字段改为蛇形命名
@@ -134,22 +135,18 @@ export async function submitOrderToServer(
  */
 export async function uploadFileForPreview(
     file: File,
-    photoId: string,
-    originalWidth?: number,
-    originalHeight?: number,
-    autoRotated?: boolean,
-    takenAt?: string
+    prefix?: string
 ): Promise<UploadResponse> {
     const formData = new FormData();
 
-    // 添加照片信息
-    formData.append('photo_id', photoId);
-    formData.append('quantity', '1'); // 预览时默认数量为1
-    formData.append('original_width', (originalWidth || 0).toString());
-    formData.append('original_height', (originalHeight || 0).toString());
-    formData.append('auto_rotated', (autoRotated || false).toString());
-    formData.append('taken_at', takenAt || new Date().toISOString().split('T')[0]);
-    formData.append('image', file, `photo_${photoId}.jpg`);
+    // 添加文件
+    formData.append('file', file);
+
+    // 如果有前缀参数，也添加上
+    // if (prefix) {
+        // formData.append('prefix', prefix);
+    // }
+    formData.append('prefix','debug_photo');
 
     const response = await fetch(`${API_BASE_URL}${PHOTO_UPLOAD_ENDPOINT}`, {
         method: 'POST',

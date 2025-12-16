@@ -548,11 +548,14 @@ export function PhotoEditor({
             const newPhoto: Photo = {
                 id: photo.id, // 保留原 ID
                 url: imageUrl,
+                photoUrl: undefined, // 新图片需要重新上传
+                uploadStatus: 'pending', // 设置为等待上传状态
                 quantity: photo.quantity, // 保留原数量
                 fileSize: file.size,
                 width,
                 height,
                 autoRotated: isLandscape, // 自动应用横图旋转
+                originalFile: file, // 保存原始文件引用，用于上传
                 // 不传递 transform，让新图片重新计算
             };
 

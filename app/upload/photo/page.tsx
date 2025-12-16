@@ -914,6 +914,11 @@ export default function PhotoPrintPage() {
                         setPhotos(photos.map((p) => 
                             p.id === oldPhoto.id ? newPhoto : p
                         ));
+                        
+                        // 如果新图片有原始文件，触发自动上传
+                        if (newPhoto.originalFile) {
+                            addToUploadQueue(newPhoto.id, newPhoto.originalFile);
+                        }
                     }}
                 />
             )}

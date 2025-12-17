@@ -1,13 +1,13 @@
-import { log } from 'console';
 import { OrderSubmitData, PhotoSubmitData } from './photoSubmit';
 import { MAX_CONCURRENT_UPLOADS } from '../config/uploadConfig';
+import { uploadToOss, OssUploadResult } from './ossUpload';
+import { Photo } from '../types/photo.types';
 
 // API 基础配置
 const API_BASE_URL = 'http://localhost:8888';
-const PHOTO_UPLOAD_ENDPOINT = '/api/photo/upload';
 const ORDER_SUBMIT_ENDPOINT = '/api/photo/submit';
 
-// 上传响应类型
+// 上传响应类型（兼容旧接口）
 export interface UploadResponse {
     filename: string;
     size: number;
@@ -66,7 +66,7 @@ export async function submitOrderToServer(
         // 步骤 1: 验证所有照片都有photoUrl
         onProgress('正在验证照片...', 10);
 
-        const photosWithUrl = photos.filter(photo => photo.photoUrl);
+        const photosWithUrl = photos.filter(photo => photo.photoUrl && photo.photoUrl !== 'failed');
         if (photosWithUrl.length !== photos.length) {
             const missingCount = photos.length - photosWithUrl.length;
             throw new Error(`${missingCount} 张照片未上传成功，请重新选择照片`);
@@ -131,72 +131,47 @@ export async function submitOrderToServer(
 }
 
 /**
- * 上传单个文件用于预览
+ * 上传单个文件到OSS（直传）
+ * @param file 要上传的文件
+ * @param prefix 自定义前缀目录（可选）
  */
 export async function uploadFileForPreview(
     file: File,
     prefix?: string
 ): Promise<UploadResponse> {
-    const formData = new FormData();
-
-    // 添加文件
-    formData.append('file', file);
-
-    // 如果有前缀参数，也添加上
-    // if (prefix) {
-        // formData.append('prefix', prefix);
-    // }
-    formData.append('prefix','debug_photo');
-
-    const response = await fetch(`${API_BASE_URL}${PHOTO_UPLOAD_ENDPOINT}`, {
-        method: 'POST',
-        body: formData,
-    });
-
-    if (!response.ok) {
-        throw new Error(`照片上传失败: ${response.status}`);
-    }
-
-    const result = await response.json();
-
-    // 检查响应格式
-    if (result.code !== 0) {
-        throw new Error(result.msg || '上传失败');
-    }
-
-    return result.data;
+    // 使用OSS直传
+    const result = await uploadToOss(file, prefix || 'debug_photo');
+    
+    // 打印上传后的OSS地址到控制台
+    console.log(`📸 照片已上传到OSS: ${result.url}`);
+    
+    // 转换为兼容的响应格式
+    return {
+        filename: result.filename,
+        size: result.size,
+        sha1: result.key, // 使用key作为sha1
+        url: result.url,
+    };
 }
 
 /**
- * 上传单张照片
+ * 上传单张照片（兼容旧接口，现在使用OSS直传）
  */
 async function uploadPhoto(photo: PhotoSubmitData): Promise<{ url: string }> {
-    const formData = new FormData();
-
-    // 添加照片信息
-    formData.append('photo_id', photo.id);
-    formData.append('quantity', photo.quantity.toString());
-    formData.append('original_width', (photo.originalWidth || 0).toString());
-    formData.append('original_height', (photo.originalHeight || 0).toString());
-    formData.append('auto_rotated', (photo.autoRotated || false).toString());
-    formData.append('taken_at', photo.takenAt || new Date().toISOString().split('T')[0]);
-    formData.append('image', photo.composedImageBlob, `photo_${photo.id}.jpg`);
-
-    // 如果是满版样式，添加裁切信息
-    if (photo.cropInfo) {
-        formData.append('crop_info', JSON.stringify(toSnakeCaseKeys(photo.cropInfo)));
+    if (!photo.composedImageBlob) {
+        throw new Error('照片数据为空');
     }
-
-    const response = await fetch(`${API_BASE_URL}${PHOTO_UPLOAD_ENDPOINT}`, {
-        method: 'POST',
-        body: formData,
+    
+    // 将Blob转换为File
+    const file = new File([photo.composedImageBlob], `photo_${photo.id}.jpg`, {
+        type: 'image/jpeg'
     });
-
-    if (!response.ok) {
-        throw new Error(`照片上传失败: ${response.status}`);
-    }
-
-    return await response.json();
+    
+    const result = await uploadToOss(file);
+    
+    console.log(`📸 照片已上传到OSS: ${result.url}`);
+    
+    return { url: result.url };
 }
 
 /**

@@ -15,4 +15,4 @@ export type OssDomainType = 'cdn' | 'proxy' | 'origin';
  * 当前使用的OSS域名类型
  * 可以修改此值来切换图片回显的域名
  */
-export const OSS_DOMAIN_TYPE: OssDomainType = 'cdn';
+export const OSS_DOMAIN_TYPE: OssDomainType = 'proxy';

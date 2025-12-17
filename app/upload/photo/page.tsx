@@ -775,6 +775,7 @@ export default function PhotoPrintPage() {
                                             key={photo.id}
                                             photo={photo}
                                             containerStyle={getPhotoContainerStyle()}
+                                            aspectRatio={currentAspectRatio}
                                             styleType={selectedStyle}
                                             watermarkConfig={watermarkConfig}
                                             isConfirmed={confirmedPhotos.has(photo.id)}

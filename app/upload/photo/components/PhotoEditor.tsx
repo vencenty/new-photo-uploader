@@ -70,6 +70,8 @@ interface KonvaCanvasProps {
     onDragMove: (x: number, y: number) => void;
     onDragEnd: (x: number, y: number) => void;
     onWheel: (deltaY: number) => void;
+    // 边界约束函数 - 实时限制拖拽位置
+    dragBoundFunc: (pos: { x: number; y: number }) => { x: number; y: number };
 }
 
 function KonvaCanvas({
@@ -85,6 +87,7 @@ function KonvaCanvas({
     onDragMove,
     onDragEnd,
     onWheel,
+    dragBoundFunc,
 }: KonvaCanvasProps) {
     const [konvaComponents, setKonvaComponents] = useState<{
         Stage: any;
@@ -149,6 +152,7 @@ function KonvaCanvas({
                     offsetX={imageAttrs.offsetX}
                     offsetY={imageAttrs.offsetY}
                     draggable
+                    dragBoundFunc={dragBoundFunc}
                     onDragStart={onDragStart}
                     onDragMove={(e: any) => {
                         onDragMove(e.target.x(), e.target.y());
@@ -386,6 +390,11 @@ export function PhotoEditor({
         };
     }, [image, stageSize, styleType]);
 
+    // 创建供 Konva 使用的 dragBoundFunc - 实时约束拖拽位置
+    const dragBoundFunc = useCallback((pos: { x: number; y: number }) => {
+        return constrainPosition(pos.x, pos.y, imageAttrs.scaleX, imageAttrs.rotation);
+    }, [constrainPosition, imageAttrs.scaleX, imageAttrs.rotation]);
+
     // 处理拖拽
     const handleDragMove = useCallback((x: number, y: number) => {
         const constrained = constrainPosition(x, y, imageAttrs.scaleX, imageAttrs.rotation);
@@ -544,6 +553,13 @@ export function PhotoEditor({
         onClose();
     }, [saveCurrentPhoto, onClose]);
 
+    // 关闭编辑器（自动保存修改）
+    const handleClose = useCallback(() => {
+        // 无论是否有改动，都保存当前状态（确保 transform 被记录）
+        saveCurrentPhoto();
+        onClose();
+    }, [saveCurrentPhoto, onClose]);
+
     // 导航
     const handleNavigate = useCallback((direction: 'prev' | 'next') => {
         if (hasChanges) {
@@ -668,7 +684,7 @@ export function PhotoEditor({
             {/* 顶部导航栏 */}
             <header className="bg-white border-b">
                 <div className="flex items-center justify-between px-4 py-3">
-                    <button className="text-2xl text-black" onClick={onClose}>←</button>
+                    <button className="text-2xl text-black" onClick={handleClose}>←</button>
                     <h1 className="text-lg font-medium text-black">编辑</h1>
                     <button
                         className="bg-black text-white px-6 py-2 rounded-full text-sm font-medium"
@@ -723,6 +739,7 @@ export function PhotoEditor({
                                     onDragMove={handleDragMove}
                                     onDragEnd={handleDragEnd}
                                     onWheel={handleWheel}
+                                    dragBoundFunc={dragBoundFunc}
                                 />
                             )}
                             

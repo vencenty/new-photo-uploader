@@ -1,11 +1,74 @@
 import { OrderSubmitData, PhotoSubmitData } from './photoSubmit';
 import { MAX_CONCURRENT_UPLOADS } from '../config/uploadConfig';
 import { uploadToOss, OssUploadResult } from './ossUpload';
-import { Photo } from '../types/photo.types';
+import { Photo, PhotoTransform, createAffineMatrix, WHITE_MARGIN_PERCENT } from '../types/photo.types';
 
 // API 基础配置
 const API_BASE_URL = 'http://localhost:8888';
 const ORDER_SUBMIT_ENDPOINT = '/api/photo/submit';
+
+/**
+ * 为没有 transform 的照片生成默认变换
+ * @param photo 照片数据
+ * @param aspectRatio 画布宽高比
+ * @param styleType 样式类型
+ * @returns 默认的 PhotoTransform
+ */
+function generateDefaultTransform(
+    photo: Photo,
+    aspectRatio: number,
+    styleType: string
+): PhotoTransform | undefined {
+    const sourceWidth = photo.width;
+    const sourceHeight = photo.height;
+    
+    if (!sourceWidth || !sourceHeight) {
+        console.warn(`照片 ${photo.id} 缺少尺寸信息，无法生成默认变换`);
+        return undefined;
+    }
+    
+    // 使用标准输出尺寸（与 PhotoCanvas 中一致）
+    const outputWidth = 400; // 标准化宽度
+    const outputHeight = outputWidth / aspectRatio;
+    
+    // 计算有效区域
+    const margin = styleType === 'white_margin' ? WHITE_MARGIN_PERCENT / 100 : 0;
+    const effectiveWidth = outputWidth * (1 - margin * 2);
+    const effectiveHeight = outputHeight * (1 - margin * 2);
+    const marginX = outputWidth * margin;
+    const marginY = outputHeight * margin;
+    
+    // 计算初始旋转（横图自动旋转90度）
+    const initialRotation = photo.autoRotated ? 90 : 0;
+    const rad = (initialRotation * Math.PI) / 180;
+    const cos = Math.abs(Math.cos(rad));
+    const sin = Math.abs(Math.sin(rad));
+    const rotatedWidth = sourceWidth * cos + sourceHeight * sin;
+    const rotatedHeight = sourceWidth * sin + sourceHeight * cos;
+    
+    // 计算缩放比例
+    let scale: number;
+    if (styleType === 'white_margin') {
+        scale = Math.min(effectiveWidth / rotatedWidth, effectiveHeight / rotatedHeight);
+    } else {
+        scale = Math.max(effectiveWidth / rotatedWidth, effectiveHeight / rotatedHeight);
+    }
+    
+    // 计算中心位置
+    const centerX = marginX + effectiveWidth / 2;
+    const centerY = marginY + effectiveHeight / 2;
+    
+    // 创建仿射矩阵
+    const matrix = createAffineMatrix(scale, scale, initialRotation, centerX, centerY);
+    
+    return {
+        matrix,
+        outputWidth,
+        outputHeight,
+        sourceWidth,
+        sourceHeight,
+    };
+}
 
 // 上传响应类型（兼容旧接口）
 export interface UploadResponse {
@@ -75,12 +138,39 @@ export async function submitOrderToServer(
         // 步骤 2: 准备订单数据
         onProgress('正在准备订单数据...', 20);
 
-        // 构建照片信息数组
-        const photoInfos = photosWithUrl.map(photo => ({
-            id: photo.id,
-            url: photo.photoUrl!, // 使用之前上传的URL
-            transform: photo.transform, // 包含编辑变换信息
-        }));
+        // 获取订单的宽高比和样式（用于生成默认变换）
+        const aspectRatio = orderInfo.aspectRatio || 0.7;
+        const styleType = orderInfo.style || 'full_bleed';
+
+        // 构建照片信息数组（包含完整的变换信息）
+        // 注意：字段名使用驼峰命名，toSnakeCaseKeys 会自动转换为蛇形命名
+        const photoInfos = photosWithUrl.map(photo => {
+            // 获取变换信息：如果没有则生成默认值
+            let transform = photo.transform;
+            
+            if (!transform) {
+                // 为未编辑的照片生成默认变换
+                transform = generateDefaultTransform(photo, aspectRatio, styleType);
+                console.log(`🔧 照片 ${photo.id} 生成默认变换:`, transform ? {
+                    matrix: transform.matrix,
+                    outputSize: `${transform.outputWidth}x${transform.outputHeight}`,
+                    sourceSize: `${transform.sourceWidth}x${transform.sourceHeight}`,
+                } : '无法生成（缺少尺寸信息）');
+            } else {
+                console.log(`📐 照片 ${photo.id} 已有变换信息:`, {
+                    matrix: transform.matrix,
+                    outputSize: `${transform.outputWidth}x${transform.outputHeight}`,
+                    sourceSize: `${transform.sourceWidth}x${transform.sourceHeight}`,
+                });
+            }
+            
+            return {
+                id: photo.id,
+                url: photo.photoUrl!, // 使用之前上传的URL
+                quantity: photo.quantity,
+                transform, // 包含完整的变换信息，toSnakeCaseKeys 会自动转换字段名
+            };
+        });
 
         // 所有提交字段改为蛇形命名
         const orderPayload = toSnakeCaseKeys({

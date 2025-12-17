@@ -16,13 +16,91 @@ export const WHITE_MARGIN_PERCENT = 5;
 
 // ==================== 类型定义 ====================
 
+/**
+ * 仿射变换矩阵
+ * 格式: [a, b, c, d, tx, ty]
+ * 
+ * 矩阵表示:
+ * | a  c  tx |
+ * | b  d  ty |
+ * | 0  0  1  |
+ * 
+ * 其中:
+ * - a = scaleX * cos(rotation)
+ * - b = scaleX * sin(rotation)  
+ * - c = -scaleY * sin(rotation)
+ * - d = scaleY * cos(rotation)
+ * - tx = translateX
+ * - ty = translateY
+ */
+export type AffineMatrix = [number, number, number, number, number, number];
+
+/**
+ * 照片变换信息（使用仿射矩阵）
+ */
 export interface PhotoTransform {
-    position: { x: number; y: number };
-    scale: number;
-    rotation: number;
-    containerWidth: number; // 保存时编辑器容器的宽度
-    containerHeight: number; // 保存时编辑器容器的高度
+    /** 仿射变换矩阵 [a, b, c, d, tx, ty] */
+    matrix: AffineMatrix;
+    /** 输出宽度（像素） */
+    outputWidth: number;
+    /** 输出高度（像素） */
+    outputHeight: number;
+    /** 原图宽度（像素） */
+    sourceWidth: number;
+    /** 原图高度（像素） */
+    sourceHeight: number;
 }
+
+/**
+ * 从scale, rotation, position创建仿射矩阵
+ */
+export function createAffineMatrix(
+    scaleX: number,
+    scaleY: number,
+    rotation: number, // 角度
+    tx: number,
+    ty: number
+): AffineMatrix {
+    const rad = (rotation * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    
+    return [
+        scaleX * cos,   // a
+        scaleX * sin,   // b
+        -scaleY * sin,  // c
+        scaleY * cos,   // d
+        tx,             // tx
+        ty              // ty
+    ];
+}
+
+/**
+ * 从仿射矩阵解析出 scale, rotation, position
+ */
+export function parseAffineMatrix(matrix: AffineMatrix): {
+    scaleX: number;
+    scaleY: number;
+    rotation: number;
+    tx: number;
+    ty: number;
+} {
+    const [a, b, c, d, tx, ty] = matrix;
+    
+    // 计算缩放
+    const scaleX = Math.sqrt(a * a + b * b);
+    const scaleY = Math.sqrt(c * c + d * d);
+    
+    // 计算旋转角度（弧度转角度）
+    const rotation = Math.atan2(b, a) * (180 / Math.PI);
+    
+    return { scaleX, scaleY, rotation, tx, ty };
+}
+
+/**
+ * 单位矩阵（无变换）
+ */
+export const IDENTITY_MATRIX: AffineMatrix = [1, 0, 0, 1, 0, 0];
 
 /** 上传状态类型 */
 export type UploadStatus = 'pending' | 'uploading' | 'success' | 'error';
@@ -39,7 +117,7 @@ export interface Photo {
     height?: number; // 原始图片高度（像素）
     thumbnailWidth?: number; // 缩略图宽度（像素）
     thumbnailHeight?: number; // 缩略图高度（像素）
-    transform?: PhotoTransform; // 编辑后的变换信息
+    transform?: PhotoTransform; // 编辑后的变换信息（仿射矩阵）
     autoRotated?: boolean; // 是否自动旋转（横图转竖图）
     takenAt?: string; // 照片拍摄日期（从 EXIF 读取）
     originalFile?: File; // 原始文件引用（用于提交）
@@ -104,9 +182,6 @@ export const DATE_FORMATS: { value: DateFormat; label: string; example: string }
     { value: 'YYYY-MM-DD', label: '年-月-日', example: '2024-01-15' },
     { value: 'YYYY/MM/DD', label: '年/月/日', example: '2024/01/15' },
     { value: 'YYYY MM DD', label: '年 月 日', example: '2024 01 15' },
-    // { value: 'MM/DD/YYYY', label: '月/日/年', example: '01/15/2024' },
-    // { value: 'DD.MM.YYYY', label: '日.月.年', example: '15.01.2024' },
-    // { value: 'YYYY年MM月DD日', label: '中文格式', example: '2024年01月15日' },
 ];
 
 /** 预设颜色 - 传统照片日期戳风格 */
@@ -173,7 +248,3 @@ export const PHOTO_SIZES: SizeOption[] = [
         ]
     },
 ];
-
-
-
-

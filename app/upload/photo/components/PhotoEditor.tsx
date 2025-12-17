@@ -1,8 +1,16 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Photo, StyleType, BLEED_AREA_PERCENT, WHITE_MARGIN_PERCENT, WatermarkConfig, WATERMARK_SIZES } from '../types/photo.types';
-import { calculatePhotoScale } from '../utils/photoTransform';
+import { 
+    Photo, 
+    StyleType, 
+    BLEED_AREA_PERCENT, 
+    WHITE_MARGIN_PERCENT, 
+    WatermarkConfig, 
+    WATERMARK_SIZES,
+    createAffineMatrix,
+    parseAffineMatrix,
+} from '../types/photo.types';
 import { formatDate } from '../utils/exifReader';
 
 interface PhotoEditorProps {
@@ -35,38 +43,168 @@ const getWatermarkPositionStyle = (position: string): React.CSSProperties => {
             return { ...baseStyle, bottom: padding, left: '50%', transform: 'translateX(-50%)' };
         case 'bottom-right':
             return { ...baseStyle, bottom: padding, right: padding };
-        // 支持旋转后的中间位置
-        case 'center-left':
-            return { ...baseStyle, top: '50%', left: padding, transform: 'translateY(-50%)' };
-        case 'center-right':
-            return { ...baseStyle, top: '50%', right: padding, transform: 'translateY(-50%)' };
         default:
             return { ...baseStyle, bottom: padding, right: padding };
     }
 };
 
-// 获取基于原图方向的水印位置
-// 如果图片被旋转显示，水印位置也需要相应调整
-const getOriginalOrientationWatermarkPosition = (
-    position: string, 
-    isAutoRotated: boolean
-): string => {
-    if (!isAutoRotated) {
-        return position;
-    }
-    
-    // 横图旋转90°显示为竖图时，位置映射
-    const rotatedPositionMap: Record<string, string> = {
-        'bottom-right': 'top-right',
-        'bottom-left': 'bottom-right',
-        'bottom-center': 'center-right',
-        'top-right': 'top-left',
-        'top-left': 'bottom-left',
-        'top-center': 'center-left',
+// Konva Canvas 组件 - 用于处理图片编辑
+interface KonvaCanvasProps {
+    image: HTMLImageElement;
+    stageSize: { width: number; height: number };
+    imageAttrs: {
+        x: number;
+        y: number;
+        scaleX: number;
+        scaleY: number;
+        rotation: number;
+        offsetX: number;
+        offsetY: number;
     };
-    
-    return rotatedPositionMap[position] || position;
-};
+    styleType: StyleType;
+    effectiveX: number;
+    effectiveY: number;
+    effectiveWidth: number;
+    effectiveHeight: number;
+    onDragStart: () => void;
+    onDragMove: (x: number, y: number) => void;
+    onDragEnd: (x: number, y: number) => void;
+    onWheel: (deltaY: number) => void;
+}
+
+function KonvaCanvas({
+    image,
+    stageSize,
+    imageAttrs,
+    styleType,
+    effectiveX,
+    effectiveY,
+    effectiveWidth,
+    effectiveHeight,
+    onDragStart,
+    onDragMove,
+    onDragEnd,
+    onWheel,
+}: KonvaCanvasProps) {
+    const [konvaComponents, setKonvaComponents] = useState<{
+        Stage: any;
+        Layer: any;
+        Image: any;
+        Rect: any;
+    } | null>(null);
+
+    // 动态加载 react-konva
+    useEffect(() => {
+        import('react-konva').then((mod) => {
+            setKonvaComponents({
+                Stage: mod.Stage,
+                Layer: mod.Layer,
+                Image: mod.Image,
+                Rect: mod.Rect,
+            });
+        });
+    }, []);
+
+    if (!konvaComponents) {
+        // 加载中显示占位
+        return (
+            <div 
+                style={{ width: stageSize.width, height: stageSize.height }}
+                className="bg-gray-100 flex items-center justify-center"
+            >
+                <span className="text-gray-400">加载中...</span>
+            </div>
+        );
+    }
+
+    const { Stage, Layer, Image: KonvaImage, Rect } = konvaComponents;
+
+    return (
+        <Stage
+            width={stageSize.width}
+            height={stageSize.height}
+            onWheel={(e: any) => {
+                e.evt.preventDefault();
+                onWheel(e.evt.deltaY);
+            }}
+        >
+            <Layer>
+                {/* 背景 */}
+                <Rect
+                    x={0}
+                    y={0}
+                    width={stageSize.width}
+                    height={stageSize.height}
+                    fill="white"
+                />
+                
+                {/* 图片 */}
+                <KonvaImage
+                    image={image}
+                    x={imageAttrs.x}
+                    y={imageAttrs.y}
+                    scaleX={imageAttrs.scaleX}
+                    scaleY={imageAttrs.scaleY}
+                    rotation={imageAttrs.rotation}
+                    offsetX={imageAttrs.offsetX}
+                    offsetY={imageAttrs.offsetY}
+                    draggable
+                    onDragStart={onDragStart}
+                    onDragMove={(e: any) => {
+                        onDragMove(e.target.x(), e.target.y());
+                    }}
+                    onDragEnd={(e: any) => {
+                        onDragEnd(e.target.x(), e.target.y());
+                    }}
+                />
+                
+                {/* 满版模式的出血线遮罩 */}
+                {styleType === 'full_bleed' && (
+                    <>
+                        <Rect
+                            x={0}
+                            y={0}
+                            width={stageSize.width}
+                            height={stageSize.height * (BLEED_AREA_PERCENT / 100)}
+                            fill="rgba(239, 68, 68, 0.15)"
+                        />
+                        <Rect
+                            x={0}
+                            y={stageSize.height * (1 - BLEED_AREA_PERCENT / 100)}
+                            width={stageSize.width}
+                            height={stageSize.height * (BLEED_AREA_PERCENT / 100)}
+                            fill="rgba(239, 68, 68, 0.15)"
+                        />
+                        <Rect
+                            x={0}
+                            y={stageSize.height * (BLEED_AREA_PERCENT / 100)}
+                            width={stageSize.width * (BLEED_AREA_PERCENT / 100)}
+                            height={stageSize.height * (1 - 2 * BLEED_AREA_PERCENT / 100)}
+                            fill="rgba(239, 68, 68, 0.15)"
+                        />
+                        <Rect
+                            x={stageSize.width * (1 - BLEED_AREA_PERCENT / 100)}
+                            y={stageSize.height * (BLEED_AREA_PERCENT / 100)}
+                            width={stageSize.width * (BLEED_AREA_PERCENT / 100)}
+                            height={stageSize.height * (1 - 2 * BLEED_AREA_PERCENT / 100)}
+                            fill="rgba(239, 68, 68, 0.15)"
+                        />
+                    </>
+                )}
+                
+                {/* 留白模式的白色边框 */}
+                {styleType === 'white_margin' && (
+                    <>
+                        <Rect x={0} y={0} width={effectiveX} height={stageSize.height} fill="white" />
+                        <Rect x={stageSize.width - effectiveX} y={0} width={effectiveX} height={stageSize.height} fill="white" />
+                        <Rect x={effectiveX} y={0} width={effectiveWidth} height={effectiveY} fill="white" />
+                        <Rect x={effectiveX} y={stageSize.height - effectiveY} width={effectiveWidth} height={effectiveY} fill="white" />
+                    </>
+                )}
+            </Layer>
+        </Stage>
+    );
+}
 
 export function PhotoEditor({ 
     photos, 
@@ -80,421 +218,334 @@ export function PhotoEditor({
     onReplace 
 }: PhotoEditorProps) {
     const photo = photos[currentIndex];
-    const [scale, setScale] = useState(1);
-    const [position, setPosition] = useState({ x: 0, y: 0 });
-    const [isDragging, setIsDragging] = useState(false);
-    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-    const [rotation, setRotation] = useState(0);
-    const [initialScale, setInitialScale] = useState(1);
-    const [minScale, setMinScale] = useState(1);
-    const [touchStartDistance, setTouchStartDistance] = useState(0);
-    const [touchStartScale, setTouchStartScale] = useState(1);
-    const [touchStartPosition, setTouchStartPosition] = useState({ x: 0, y: 0 });
-    const [isPinching, setIsPinching] = useState(false);
-    const imageRef = useRef<HTMLDivElement>(null);
+    
+    // Konva 相关状态
+    const [image, setImage] = useState<HTMLImageElement | null>(null);
+    const [stageSize, setStageSize] = useState({ width: 300, height: 400 });
+    const [imageAttrs, setImageAttrs] = useState({
+        x: 0,
+        y: 0,
+        scaleX: 1,
+        scaleY: 1,
+        rotation: 0,
+        offsetX: 0,
+        offsetY: 0,
+    });
+    const [hasChanges, setHasChanges] = useState(false);
+    const [isClient, setIsClient] = useState(false);
+    
     const containerRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    
-    // 使用 ref 存储中间缩放状态，避免频繁 setState 导致抖动
-    const pendingScaleRef = useRef<number | null>(null);
-    const rafIdRef = useRef<number | null>(null);
-    
-    // 标记当前照片是否有未保存的修改
-    const [hasChanges, setHasChanges] = useState(false);
 
-    // 计算旋转后的边界框尺寸
-    const getRotatedBounds = (width: number, height: number, angle: number) => {
-        const rad = (angle * Math.PI) / 180;
-        const cos = Math.abs(Math.cos(rad));
-        const sin = Math.abs(Math.sin(rad));
-        return {
-            width: width * cos + height * sin,
-            height: width * sin + height * cos,
-        };
-    };
-
-    // 计算在给定缩放和旋转下的最小缩放比例
-    const calculateMinScale = useCallback((rot: number) => {
-        if (!photo) return 1;
-        
-        // 优先使用缩略图尺寸
-        const width = photo.thumbnailWidth || photo.width;
-        const height = photo.thumbnailHeight || photo.height;
-        
-        if (!width || !height || !containerRef.current) return 1;
-
-        const containerWidth = containerRef.current.offsetWidth;
-        const containerHeight = containerRef.current.offsetHeight;
-
-        // 获取旋转后的边界框
-        const rotatedBounds = getRotatedBounds(width, height, rot);
-        
-        // 计算需要的最小缩放比例
-        const scaleX = containerWidth / rotatedBounds.width;
-        const scaleY = containerHeight / rotatedBounds.height;
-        
-        // 满版：使用 Math.max 确保图片能覆盖容器（可能裁切）
-        // 留白：使用 Math.min 确保图片完全显示在容器内（object-contain）
-        return styleType === 'white_margin' 
-            ? Math.min(scaleX, scaleY)
-            : Math.max(scaleX, scaleY);
-    }, [photo, styleType]);
-
-    // 限制位置
-    const constrainPosition = useCallback((pos: { x: number; y: number }, currentScale: number, currentRotation: number) => {
-        if (!photo || !containerRef.current) return pos;
-        
-        // 优先使用缩略图尺寸
-        const width = photo.thumbnailWidth || photo.width;
-        const height = photo.thumbnailHeight || photo.height;
-        
-        if (!width || !height) return pos;
-
-        const containerWidth = containerRef.current.offsetWidth;
-        const containerHeight = containerRef.current.offsetHeight;
-
-        // 计算缩放后的图片尺寸
-        const scaledWidth = width * currentScale;
-        const scaledHeight = height * currentScale;
-
-        // 获取旋转后的边界
-        const rotatedBounds = getRotatedBounds(scaledWidth, scaledHeight, currentRotation);
-
-        if (styleType === 'white_margin') {
-            // 留白模式：确保照片不会移出容器边界
-            const maxOffsetX = Math.max(0, (rotatedBounds.width - containerWidth) / 2);
-            const maxOffsetY = Math.max(0, (rotatedBounds.height - containerHeight) / 2);
-            
-            return {
-                x: Math.max(-maxOffsetX, Math.min(maxOffsetX, pos.x)),
-                y: Math.max(-maxOffsetY, Math.min(maxOffsetY, pos.y)),
-            };
-        } else {
-            // 满版模式：防止出现白边，照片必须覆盖容器
-            const maxOffsetX = Math.max(0, (rotatedBounds.width - containerWidth) / 2);
-            const maxOffsetY = Math.max(0, (rotatedBounds.height - containerHeight) / 2);
-
-            return {
-                x: Math.max(-maxOffsetX, Math.min(maxOffsetX, pos.x)),
-                y: Math.max(-maxOffsetY, Math.min(maxOffsetY, pos.y)),
-            };
-        }
-    }, [photo, styleType]);
-
-    // 保存当前照片的编辑状态
-    const saveCurrentPhoto = useCallback(() => {
-        if (!containerRef.current || !photo) return;
-        
-        const updatedPhoto = {
-            ...photo,
-            transform: {
-                position,
-                scale,
-                rotation,
-                containerWidth: containerRef.current.offsetWidth,
-                containerHeight: containerRef.current.offsetHeight,
-            },
-        };
-        onSave(updatedPhoto);
-        setHasChanges(false);
-    }, [photo, position, scale, rotation, onSave]);
-
-    // 初始化图片尺寸
+    // 客户端渲染检测
     useEffect(() => {
-        if (!photo || !containerRef.current) return;
-        
-        // 优先使用缩略图尺寸
-        const width = photo.thumbnailWidth || photo.width;
-        const height = photo.thumbnailHeight || photo.height;
-        
-        if (!width || !height) return;
-
-        const containerWidth = containerRef.current.offsetWidth;
-        const containerHeight = containerRef.current.offsetHeight;
-
-        // 如果有保存的变换信息，使用保存的值；否则使用默认值
-        if (photo.transform) {
-            // 使用保存的变换
-            const rot = photo.transform.rotation;
-            const minS = calculateMinScale(rot);
-            setMinScale(minS);
-            
-            // 确保缩放不小于最小值
-            const safeScale = Math.max(minS, photo.transform.scale);
-            setScale(safeScale);
-            setRotation(rot);
-            
-            // 限制位置
-            const constrainedPos = constrainPosition(photo.transform.position, safeScale, rot);
-            setPosition(constrainedPos);
-            
-            // 计算初始缩放用于重置
-            const initScale = calculatePhotoScale(
-                photo,
-                containerWidth,
-                containerHeight,
-                styleType,
-                rot
-            );
-            setInitialScale(initScale);
-        } else {
-            // 使用公共函数计算初始缩放
-            const initialRotation = photo.autoRotated ? 90 : 0;
-            const newScale = calculatePhotoScale(
-                photo,
-                containerWidth,
-                containerHeight,
-                styleType,
-                initialRotation
-            );
-            
-            const minS = calculateMinScale(initialRotation);
-            setMinScale(minS);
-            setScale(newScale);
-            setInitialScale(newScale);
-            setPosition({ x: 0, y: 0 });
-            setRotation(initialRotation);
-        }
-        setHasChanges(false);
-    }, [photo, aspectRatio, styleType, calculateMinScale, constrainPosition]);
-
-    // 清理 requestAnimationFrame
-    useEffect(() => {
-        return () => {
-            if (rafIdRef.current) {
-                cancelAnimationFrame(rafIdRef.current);
-            }
-        };
+        setIsClient(true);
     }, []);
 
-    // 计算两个触摸点之间的距离
-    const getTouchDistance = (touches: React.TouchList) => {
-        if (touches.length < 2) return 0;
-        const dx = touches[0].clientX - touches[1].clientX;
-        const dy = touches[0].clientY - touches[1].clientY;
-        return Math.sqrt(dx * dx + dy * dy);
-    };
-
-    // 计算双指中心点
-    const getTouchCenter = (touches: React.TouchList) => {
-        if (touches.length < 2) return { x: 0, y: 0 };
-        return {
-            x: (touches[0].clientX + touches[1].clientX) / 2,
-            y: (touches[0].clientY + touches[1].clientY) / 2,
+    // 加载图片
+    useEffect(() => {
+        if (!photo) return;
+        
+        const img = new window.Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            setImage(img);
         };
-    };
+        img.src = photo.url;
+    }, [photo?.url]);
 
-    const handleTouchStart = (e: React.TouchEvent) => {
-        // 取消任何待处理的动画帧
-        if (rafIdRef.current) {
-            cancelAnimationFrame(rafIdRef.current);
-            rafIdRef.current = null;
+    // 计算容器尺寸
+    useEffect(() => {
+        if (!containerRef.current) return;
+        
+        const updateSize = () => {
+            const container = containerRef.current;
+            if (!container) return;
+            
+            const containerWidth = container.offsetWidth;
+            const containerHeight = containerWidth / aspectRatio;
+            
+            setStageSize({
+                width: containerWidth,
+                height: containerHeight,
+            });
+        };
+        
+        updateSize();
+        window.addEventListener('resize', updateSize);
+        return () => window.removeEventListener('resize', updateSize);
+    }, [aspectRatio, styleType]);
+
+    // 初始化图片位置和缩放
+    useEffect(() => {
+        if (!image || !stageSize.width || !stageSize.height) return;
+        
+        const imgWidth = image.width;
+        const imgHeight = image.height;
+        
+        // 计算有效区域（考虑留白）
+        const margin = styleType === 'white_margin' ? WHITE_MARGIN_PERCENT / 100 : 0;
+        const effectiveWidth = stageSize.width * (1 - margin * 2);
+        const effectiveHeight = stageSize.height * (1 - margin * 2);
+        const marginX = stageSize.width * margin;
+        const marginY = stageSize.height * margin;
+        
+        // 如果有保存的变换，恢复它
+        if (photo?.transform) {
+            const { scaleX, scaleY, rotation, tx, ty } = parseAffineMatrix(photo.transform.matrix);
+            setImageAttrs({
+                x: tx,
+                y: ty,
+                scaleX,
+                scaleY,
+                rotation,
+                offsetX: imgWidth / 2,
+                offsetY: imgHeight / 2,
+            });
+            setHasChanges(false);
+            return;
         }
         
-        if (e.touches.length === 2) {
-            // 双指缩放开始
-            const distance = getTouchDistance(e.touches);
-            setTouchStartDistance(distance);
-            setTouchStartScale(scale);
-            setTouchStartPosition({ ...position });
-            setIsPinching(true);
-            setIsDragging(false);
-        } else if (e.touches.length === 1 && !isPinching) {
-            // 单指拖拽（仅在非缩放状态下）
-            setIsDragging(true);
-            setDragStart({
-                x: e.touches[0].clientX - position.x,
-                y: e.touches[0].clientY - position.y
-            });
+        // 计算初始缩放 - 考虑是否自动旋转
+        const initialRotation = photo?.autoRotated ? 90 : 0;
+        const rad = (initialRotation * Math.PI) / 180;
+        const cos = Math.abs(Math.cos(rad));
+        const sin = Math.abs(Math.sin(rad));
+        const rotatedWidth = imgWidth * cos + imgHeight * sin;
+        const rotatedHeight = imgWidth * sin + imgHeight * cos;
+        
+        let scale: number;
+        if (styleType === 'white_margin') {
+            scale = Math.min(effectiveWidth / rotatedWidth, effectiveHeight / rotatedHeight);
+        } else {
+            scale = Math.max(effectiveWidth / rotatedWidth, effectiveHeight / rotatedHeight);
         }
-    };
-
-    const handleTouchMove = (e: React.TouchEvent) => {
-        if (e.touches.length === 2 && touchStartDistance > 0 && isPinching) {
-            // 双指缩放 - 使用 requestAnimationFrame 平滑更新
-            const distance = getTouchDistance(e.touches);
-            const scaleRatio = distance / touchStartDistance;
-            const newScale = Math.max(minScale, Math.min(touchStartScale * scaleRatio, touchStartScale * 3));
-            
-            // 存储待更新的缩放值
-            pendingScaleRef.current = newScale;
-            
-            // 使用 requestAnimationFrame 批量更新
-            if (!rafIdRef.current) {
-                rafIdRef.current = requestAnimationFrame(() => {
-                    if (pendingScaleRef.current !== null) {
-                        const finalScale = pendingScaleRef.current;
-                        setScale(finalScale);
-                        
-                        // 缩放后约束位置
-                        const constrainedPos = constrainPosition(touchStartPosition, finalScale, rotation);
-                        setPosition(constrainedPos);
-                        
-                        setHasChanges(true);
-                        pendingScaleRef.current = null;
-                    }
-                    rafIdRef.current = null;
-                });
-            }
-        } else if (isDragging && e.touches.length === 1 && !isPinching) {
-            // 单指拖拽
-            const newPosition = {
-                x: e.touches[0].clientX - dragStart.x,
-                y: e.touches[0].clientY - dragStart.y
-            };
-            const constrainedPos = constrainPosition(newPosition, scale, rotation);
-            setPosition(constrainedPos);
-            setHasChanges(true);
-        }
-    };
-
-    const handleTouchEnd = (e: React.TouchEvent) => {
-        // 如果还有一个手指在屏幕上，可能是从双指变成单指
-        if (e.touches.length === 1 && isPinching) {
-            // 从双指缩放切换到单指拖拽
-            setIsPinching(false);
-            setTouchStartDistance(0);
-            setIsDragging(true);
-            setDragStart({
-                x: e.touches[0].clientX - position.x,
-                y: e.touches[0].clientY - position.y
-            });
-        } else if (e.touches.length === 0) {
-            // 所有手指都离开
-            setIsDragging(false);
-            setIsPinching(false);
-            setTouchStartDistance(0);
-            
-            // 清理 RAF
-            if (rafIdRef.current) {
-                cancelAnimationFrame(rafIdRef.current);
-                rafIdRef.current = null;
-            }
-        }
-    };
-
-    const handleMouseDown = (e: React.MouseEvent) => {
-        setIsDragging(true);
-        setDragStart({
-            x: e.clientX - position.x,
-            y: e.clientY - position.y
+        
+        const centerX = marginX + effectiveWidth / 2;
+        const centerY = marginY + effectiveHeight / 2;
+        
+        setImageAttrs({
+            x: centerX,
+            y: centerY,
+            scaleX: scale,
+            scaleY: scale,
+            rotation: initialRotation,
+            offsetX: imgWidth / 2,
+            offsetY: imgHeight / 2,
         });
-    };
+        
+        setHasChanges(false);
+    }, [image, stageSize, styleType, photo?.transform, photo?.autoRotated]);
 
-    const handleMouseMove = (e: React.MouseEvent) => {
-        if (!isDragging) return;
-        const newPosition = {
-            x: e.clientX - dragStart.x,
-            y: e.clientY - dragStart.y
+    // 获取最小缩放比例
+    const getMinScale = useCallback(() => {
+        if (!image || !stageSize.width) return 0.1;
+        
+        const margin = styleType === 'white_margin' ? WHITE_MARGIN_PERCENT / 100 : 0;
+        const effectiveWidth = stageSize.width * (1 - margin * 2);
+        const effectiveHeight = stageSize.height * (1 - margin * 2);
+        
+        const rad = (imageAttrs.rotation * Math.PI) / 180;
+        const cos = Math.abs(Math.cos(rad));
+        const sin = Math.abs(Math.sin(rad));
+        const rotatedWidth = image.width * cos + image.height * sin;
+        const rotatedHeight = image.width * sin + image.height * cos;
+        
+        if (styleType === 'white_margin') {
+            return Math.min(effectiveWidth / rotatedWidth, effectiveHeight / rotatedHeight) * 0.5;
+        } else {
+            return Math.max(effectiveWidth / rotatedWidth, effectiveHeight / rotatedHeight);
+        }
+    }, [image, stageSize, styleType, imageAttrs.rotation]);
+
+    // 限制位置
+    const constrainPosition = useCallback((x: number, y: number, scale: number, rotation: number) => {
+        if (!image || !stageSize.width) return { x, y };
+        
+        const margin = styleType === 'white_margin' ? WHITE_MARGIN_PERCENT / 100 : 0;
+        const effectiveWidth = stageSize.width * (1 - margin * 2);
+        const effectiveHeight = stageSize.height * (1 - margin * 2);
+        const marginX = stageSize.width * margin;
+        const marginY = stageSize.height * margin;
+        
+        const rad = (rotation * Math.PI) / 180;
+        const cos = Math.abs(Math.cos(rad));
+        const sin = Math.abs(Math.sin(rad));
+        const scaledWidth = (image.width * cos + image.height * sin) * scale;
+        const scaledHeight = (image.width * sin + image.height * cos) * scale;
+        
+        const centerX = marginX + effectiveWidth / 2;
+        const centerY = marginY + effectiveHeight / 2;
+        
+        const maxOffsetX = Math.max(0, (scaledWidth - effectiveWidth) / 2);
+        const maxOffsetY = Math.max(0, (scaledHeight - effectiveHeight) / 2);
+        
+        return {
+            x: Math.max(centerX - maxOffsetX, Math.min(centerX + maxOffsetX, x)),
+            y: Math.max(centerY - maxOffsetY, Math.min(centerY + maxOffsetY, y)),
         };
-        const constrainedPos = constrainPosition(newPosition, scale, rotation);
-        setPosition(constrainedPos);
+    }, [image, stageSize, styleType]);
+
+    // 处理拖拽
+    const handleDragMove = useCallback((x: number, y: number) => {
+        const constrained = constrainPosition(x, y, imageAttrs.scaleX, imageAttrs.rotation);
+        setImageAttrs(prev => ({
+            ...prev,
+            x: constrained.x,
+            y: constrained.y,
+        }));
         setHasChanges(true);
-    };
+    }, [constrainPosition, imageAttrs.scaleX, imageAttrs.rotation]);
 
-    const handleMouseUp = () => {
-        setIsDragging(false);
-    };
+    const handleDragEnd = useCallback((x: number, y: number) => {
+        const constrained = constrainPosition(x, y, imageAttrs.scaleX, imageAttrs.rotation);
+        setImageAttrs(prev => ({
+            ...prev,
+            x: constrained.x,
+            y: constrained.y,
+        }));
+    }, [constrainPosition, imageAttrs.scaleX, imageAttrs.rotation]);
 
-    // 滚轮缩放
-    const handleWheel = (e: React.WheelEvent) => {
-        e.preventDefault();
-        const delta = -e.deltaY / 1000;
-        const newScale = Math.max(minScale, Math.min(scale * (1 + delta), scale * 3));
+    // 处理滚轮缩放
+    const handleWheel = useCallback((deltaY: number) => {
+        const scaleBy = 1.05;
+        const minScale = getMinScale();
+        const maxScale = minScale * 5;
         
-        setScale(newScale);
+        let newScale = deltaY < 0 
+            ? imageAttrs.scaleX * scaleBy 
+            : imageAttrs.scaleX / scaleBy;
+        
+        newScale = Math.max(minScale, Math.min(maxScale, newScale));
+        
+        const constrained = constrainPosition(
+            imageAttrs.x, 
+            imageAttrs.y, 
+            newScale, 
+            imageAttrs.rotation
+        );
+        
+        setImageAttrs(prev => ({
+            ...prev,
+            scaleX: newScale,
+            scaleY: newScale,
+            x: constrained.x,
+            y: constrained.y,
+        }));
         setHasChanges(true);
-        
-        // 缩放后重新约束位置
-        const constrainedPos = constrainPosition(position, newScale, rotation);
-        setPosition(constrainedPos);
-    };
+    }, [imageAttrs, getMinScale, constrainPosition]);
 
-    const handleRotate = () => {
-        const newRotation = (rotation + 90) % 360;
-        setRotation(newRotation);
+    // 旋转90度
+    const handleRotate = useCallback(() => {
+        const newRotation = (imageAttrs.rotation + 90) % 360;
+        
+        if (!image || !stageSize.width) return;
+        
+        const margin = styleType === 'white_margin' ? WHITE_MARGIN_PERCENT / 100 : 0;
+        const effectiveWidth = stageSize.width * (1 - margin * 2);
+        const effectiveHeight = stageSize.height * (1 - margin * 2);
+        
+        const rad = (newRotation * Math.PI) / 180;
+        const cos = Math.abs(Math.cos(rad));
+        const sin = Math.abs(Math.sin(rad));
+        const rotatedWidth = image.width * cos + image.height * sin;
+        const rotatedHeight = image.width * sin + image.height * cos;
+        
+        let minScale: number;
+        if (styleType === 'white_margin') {
+            minScale = Math.min(effectiveWidth / rotatedWidth, effectiveHeight / rotatedHeight) * 0.5;
+        } else {
+            minScale = Math.max(effectiveWidth / rotatedWidth, effectiveHeight / rotatedHeight);
+        }
+        
+        const newScale = Math.max(imageAttrs.scaleX, minScale);
+        const constrained = constrainPosition(imageAttrs.x, imageAttrs.y, newScale, newRotation);
+        
+        setImageAttrs(prev => ({
+            ...prev,
+            rotation: newRotation,
+            scaleX: newScale,
+            scaleY: newScale,
+            x: constrained.x,
+            y: constrained.y,
+        }));
         setHasChanges(true);
-        
-        // 重新计算最小缩放比例
-        const newMinScale = calculateMinScale(newRotation);
-        setMinScale(newMinScale);
-        
-        // 如果当前缩放小于新的最小缩放，调整它
-        const newScale = Math.max(scale, newMinScale);
-        setScale(newScale);
-        
-        // 重新约束位置
-        const constrainedPos = constrainPosition(position, newScale, newRotation);
-        setPosition(constrainedPos);
-    };
+    }, [imageAttrs, image, stageSize, styleType, constrainPosition]);
 
-    const handleReset = () => {
-        setScale(initialScale);
-        setPosition({ x: 0, y: 0 });
-        setRotation(photo?.autoRotated ? 90 : 0);
-        const newMinScale = calculateMinScale(photo?.autoRotated ? 90 : 0);
-        setMinScale(newMinScale);
+    // 重置
+    const handleReset = useCallback(() => {
+        if (!image || !stageSize.width) return;
+        
+        const margin = styleType === 'white_margin' ? WHITE_MARGIN_PERCENT / 100 : 0;
+        const effectiveWidth = stageSize.width * (1 - margin * 2);
+        const effectiveHeight = stageSize.height * (1 - margin * 2);
+        const marginX = stageSize.width * margin;
+        const marginY = stageSize.height * margin;
+        
+        const initialRotation = photo?.autoRotated ? 90 : 0;
+        const rad = (initialRotation * Math.PI) / 180;
+        const cos = Math.abs(Math.cos(rad));
+        const sin = Math.abs(Math.sin(rad));
+        const rotatedWidth = image.width * cos + image.height * sin;
+        const rotatedHeight = image.width * sin + image.height * cos;
+        
+        let scale: number;
+        if (styleType === 'white_margin') {
+            scale = Math.min(effectiveWidth / rotatedWidth, effectiveHeight / rotatedHeight);
+        } else {
+            scale = Math.max(effectiveWidth / rotatedWidth, effectiveHeight / rotatedHeight);
+        }
+        
+        const centerX = marginX + effectiveWidth / 2;
+        const centerY = marginY + effectiveHeight / 2;
+        
+        setImageAttrs({
+            x: centerX,
+            y: centerY,
+            scaleX: scale,
+            scaleY: scale,
+            rotation: initialRotation,
+            offsetX: image.width / 2,
+            offsetY: image.height / 2,
+        });
         setHasChanges(true);
-    };
+    }, [image, stageSize, styleType, photo?.autoRotated]);
 
-    const handleSave = () => {
+    // 保存当前变换
+    const saveCurrentPhoto = useCallback(() => {
+        if (!photo || !image) return;
+        
+        const matrix = createAffineMatrix(
+            imageAttrs.scaleX,
+            imageAttrs.scaleY,
+            imageAttrs.rotation,
+            imageAttrs.x,
+            imageAttrs.y
+        );
+        
+        const updatedPhoto: Photo = {
+            ...photo,
+            transform: {
+                matrix,
+                outputWidth: stageSize.width,
+                outputHeight: stageSize.height,
+                sourceWidth: image.width,
+                sourceHeight: image.height,
+            },
+        };
+        
+        onSave(updatedPhoto);
+        setHasChanges(false);
+    }, [photo, image, imageAttrs, stageSize, onSave]);
+
+    // 保存并关闭
+    const handleSave = useCallback(() => {
         saveCurrentPhoto();
         onClose();
-    };
+    }, [saveCurrentPhoto, onClose]);
 
-    // 渲染水印
-    const renderWatermark = () => {
-        // 如果水印未启用或照片没有拍摄日期，不渲染
-        if (!watermarkConfig.enabled || !photo?.takenAt) {
-            return null;
-        }
-
-        const sizeConfig = WATERMARK_SIZES.find(s => s.value === watermarkConfig.size);
-        const fontSize = sizeConfig?.fontSize || 16;
-
-        // 根据颜色类型选择不同的阴影效果
-        const isLightColor = ['#FFFFFF', '#FFD700'].includes(watermarkConfig.color);
-        const textShadow = isLightColor
-            ? '0 1px 3px rgba(0,0,0,0.6)'
-            : `0 0 6px ${watermarkConfig.color}40, 0 0 3px ${watermarkConfig.color}60`;
-
-        // 检查是否旋转了90度或270度
-        const isRotated90or270 = rotation % 180 !== 0;
-        
-        // 根据原图方向调整水印位置
-        const adjustedPosition = getOriginalOrientationWatermarkPosition(
-            watermarkConfig.position,
-            isRotated90or270
-        );
-        
-        const basePositionStyle = getWatermarkPositionStyle(adjustedPosition);
-
-        return (
-            <div
-                className="pointer-events-none z-20 whitespace-nowrap"
-                style={{
-                    ...basePositionStyle,
-                    fontFamily: "var(--font-dseg), monospace",
-                    color: watermarkConfig.color,
-                    fontSize: `${fontSize}px`,
-                    opacity: watermarkConfig.opacity / 100,
-                    textShadow,
-                    letterSpacing: '2px',
-                    // 如果图片旋转了，水印也需要旋转以匹配原图方向
-                    transform: isRotated90or270 
-                        ? `${basePositionStyle.transform || ''} rotate(-90deg)`.trim()
-                        : basePositionStyle.transform,
-                    transformOrigin: 'center',
-                }}
-            >
-                {formatDate(photo.takenAt, watermarkConfig.dateFormat)}
-            </div>
-        );
-    };
-
-    // 导航到上一张/下一张照片
-    const handleNavigate = (direction: 'prev' | 'next') => {
-        // 先自动保存当前照片的修改
+    // 导航
+    const handleNavigate = useCallback((direction: 'prev' | 'next') => {
         if (hasChanges) {
             saveCurrentPhoto();
         }
@@ -503,9 +554,9 @@ export function PhotoEditor({
         if (newIndex >= 0 && newIndex < photos.length) {
             onNavigate(newIndex);
         }
-    };
+    }, [hasChanges, saveCurrentPhoto, currentIndex, photos.length, onNavigate]);
 
-    // 处理替换图片
+    // 替换图片
     const handleReplaceClick = () => {
         fileInputRef.current?.click();
     };
@@ -514,7 +565,7 @@ export function PhotoEditor({
         const file = event.target.files?.[0];
         if (!file) return;
 
-        const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+        const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
         if (!file.type.startsWith('image/')) {
             alert('请选择图片文件');
@@ -528,57 +579,80 @@ export function PhotoEditor({
 
         try {
             const imageUrl = URL.createObjectURL(file);
-
-            const { width, height } = await new Promise<{
-                width: number;
-                height: number;
-            }>((resolve, reject) => {
+            const { width, height } = await new Promise<{ width: number; height: number }>((resolve, reject) => {
                 const img = document.createElement('img');
-                img.onload = () => {
-                    resolve({ width: img.width, height: img.height });
-                };
+                img.onload = () => resolve({ width: img.width, height: img.height });
                 img.onerror = () => reject(new Error('图片加载失败'));
                 img.src = imageUrl;
             });
 
-            // 检测是否为横图（宽度大于高度）
             const isLandscape = width > height;
 
-            // 创建新的 Photo 对象，保留原照片的 id 和数量
             const newPhoto: Photo = {
-                id: photo.id, // 保留原 ID
+                id: photo.id,
                 url: imageUrl,
-                photoUrl: undefined, // 新图片需要重新上传
-                uploadStatus: 'pending', // 设置为等待上传状态
-                quantity: photo.quantity, // 保留原数量
+                photoUrl: undefined,
+                uploadStatus: 'pending',
+                quantity: photo.quantity,
                 fileSize: file.size,
                 width,
                 height,
-                autoRotated: isLandscape, // 自动应用横图旋转
-                originalFile: file, // 保存原始文件引用，用于上传
-                // 不传递 transform，让新图片重新计算
+                autoRotated: isLandscape,
+                originalFile: file,
             };
 
-            // 释放旧的 blob URL
             if (photo.url.startsWith('blob:')) {
                 URL.revokeObjectURL(photo.url);
             }
 
-            // 调用替换回调
             onReplace(photo, newPhoto);
-
         } catch (error) {
             console.error('图片加载错误:', error);
             alert('图片加载失败，请重试');
         }
 
-        // 清空 input 以便再次选择相同文件
         event.target.value = '';
     };
 
-    if (!photo) {
-        return null;
-    }
+    // 渲染水印
+    const renderWatermark = () => {
+        if (!watermarkConfig.enabled || !photo?.takenAt) {
+            return null;
+        }
+
+        const sizeConfig = WATERMARK_SIZES.find(s => s.value === watermarkConfig.size);
+        const fontSize = sizeConfig?.fontSize || 16;
+        const isLightColor = ['#FFFFFF', '#FFD700'].includes(watermarkConfig.color);
+        const textShadow = isLightColor
+            ? '0 1px 3px rgba(0,0,0,0.6)'
+            : `0 0 6px ${watermarkConfig.color}40, 0 0 3px ${watermarkConfig.color}60`;
+
+        return (
+            <div
+                className="pointer-events-none z-20 whitespace-nowrap"
+                style={{
+                    ...getWatermarkPositionStyle(watermarkConfig.position),
+                    fontFamily: "var(--font-dseg), monospace",
+                    color: watermarkConfig.color,
+                    fontSize: `${fontSize}px`,
+                    opacity: watermarkConfig.opacity / 100,
+                    textShadow,
+                    letterSpacing: '2px',
+                }}
+            >
+                {formatDate(photo.takenAt, watermarkConfig.dateFormat)}
+            </div>
+        );
+    };
+
+    if (!photo) return null;
+
+    // 计算有效区域
+    const margin = styleType === 'white_margin' ? WHITE_MARGIN_PERCENT / 100 : 0;
+    const effectiveX = stageSize.width * margin;
+    const effectiveY = stageSize.height * margin;
+    const effectiveWidth = stageSize.width * (1 - margin * 2);
+    const effectiveHeight = stageSize.height * (1 - margin * 2);
 
     return (
         <div className="fixed inset-0 bg-white z-50 flex flex-col">
@@ -594,12 +668,7 @@ export function PhotoEditor({
             {/* 顶部导航栏 */}
             <header className="bg-white border-b">
                 <div className="flex items-center justify-between px-4 py-3">
-                    <button 
-                        className="text-2xl text-black" 
-                        onClick={onClose}
-                    >
-                        ←
-                    </button>
+                    <button className="text-2xl text-black" onClick={onClose}>←</button>
                     <h1 className="text-lg font-medium text-black">编辑</h1>
                     <button
                         className="bg-black text-white px-6 py-2 rounded-full text-sm font-medium"
@@ -616,188 +685,50 @@ export function PhotoEditor({
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                     </svg>
-                    <span>显示区域即为打印区域，请点击图片进行调整</span>
+                    <span>拖动图片调整位置，滚轮/双指缩放</span>
                 </div>
                 {styleType === 'full_bleed' && (
                     <div className="flex items-center gap-2 text-xs text-red-500 mt-1">
                         <div 
                             className="w-4 h-4 rounded-sm"
                             style={{
-                                background: `repeating-linear-gradient(
-                                    -45deg,
-                                    transparent,
-                                    transparent 2px,
-                                    rgba(239, 68, 68, 0.5) 2px,
-                                    rgba(239, 68, 68, 0.5) 4px
-                                )`,
+                                background: `repeating-linear-gradient(-45deg, transparent, transparent 2px, rgba(239, 68, 68, 0.5) 2px, rgba(239, 68, 68, 0.5) 4px)`,
                             }}
                         />
-                        <span>斜线区域为出血区域，此区域内容可能被裁切</span>
+                        <span>红色区域为出血区域，此区域内容可能被裁切</span>
                     </div>
                 )}
             </div>
 
-            {/* 图片编辑区域 */}
+            {/* Konva 编辑区域 */}
             <div className="flex-1 flex items-center justify-center bg-gray-100 p-4 overflow-hidden">
                 <div className="relative w-full max-w-lg">
-                    {/* 裁剪框 - 保持宽高比 */}
                     <div 
+                        ref={containerRef}
                         className="relative w-full bg-white shadow-2xl overflow-hidden"
-                        style={{ 
-                            paddingTop: `${(1 / aspectRatio) * 100}%`,
-                        }}
+                        style={{ paddingTop: `${(1 / aspectRatio) * 100}%` }}
                     >
-                        {styleType === 'white_margin' ? (
-                            // 留白样式 - 外层等比白边（约4mm）+ 内层 object-contain
-                            <div 
-                                className="absolute inset-0"
-                                style={{ padding: `${WHITE_MARGIN_PERCENT}%` }}
-                            >
-                                <div 
-                                    ref={containerRef}
-                                    className="relative w-full h-full overflow-hidden"
-                                >
-                                    {/* 可拖动的图片 */}
-                                    <div 
-                                        ref={imageRef}
-                                        className="absolute inset-0 cursor-move select-none touch-none"
-                                        onMouseDown={handleMouseDown}
-                                        onMouseMove={handleMouseMove}
-                                        onMouseUp={handleMouseUp}
-                                        onMouseLeave={handleMouseUp}
-                                        onWheel={handleWheel}
-                                        onTouchStart={handleTouchStart}
-                                        onTouchMove={handleTouchMove}
-                                        onTouchEnd={handleTouchEnd}
-                                    >
-                                        <img
-                                            src={photo.url}
-                                            alt="编辑照片"
-                                            className="absolute top-1/2 left-1/2 max-w-none pointer-events-none"
-                                            style={{
-                                                transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
-                                                transition: isDragging ? 'none' : 'transform 0.3s ease',
-                                                width: (photo.thumbnailWidth || photo.width) ? `${photo.thumbnailWidth || photo.width}px` : 'auto',
-                                                height: (photo.thumbnailHeight || photo.height) ? `${photo.thumbnailHeight || photo.height}px` : 'auto',
-                                            }}
-                                            draggable={false}
-                                        />
-                                    </div>
-                                    {/* 日期水印 */}
-                                    {renderWatermark()}
-                                </div>
-                            </div>
-                        ) : (
-                            // 满版样式 - 原有的显示方式
-                            <div 
-                                ref={containerRef}
-                                className="absolute inset-0"
-                            >
-                                {/* 可拖动的图片 */}
-                                <div 
-                                    ref={imageRef}
-                                    className="absolute inset-0 cursor-move select-none touch-none"
-                                    onMouseDown={handleMouseDown}
-                                    onMouseMove={handleMouseMove}
-                                    onMouseUp={handleMouseUp}
-                                    onMouseLeave={handleMouseUp}
+                        <div className="absolute inset-0">
+                            {isClient && image && (
+                                <KonvaCanvas
+                                    image={image}
+                                    stageSize={stageSize}
+                                    imageAttrs={imageAttrs}
+                                    styleType={styleType}
+                                    effectiveX={effectiveX}
+                                    effectiveY={effectiveY}
+                                    effectiveWidth={effectiveWidth}
+                                    effectiveHeight={effectiveHeight}
+                                    onDragStart={() => {}}
+                                    onDragMove={handleDragMove}
+                                    onDragEnd={handleDragEnd}
                                     onWheel={handleWheel}
-                                    onTouchStart={handleTouchStart}
-                                    onTouchMove={handleTouchMove}
-                                    onTouchEnd={handleTouchEnd}
-                                >
-                                    <img
-                                        src={photo.url}
-                                        alt="编辑照片"
-                                        className="absolute top-1/2 left-1/2 max-w-none pointer-events-none"
-                                        style={{
-                                            transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
-                                            transition: isDragging ? 'none' : 'transform 0.3s ease',
-                                            width: (photo.thumbnailWidth || photo.width) ? `${photo.thumbnailWidth || photo.width}px` : 'auto',
-                                            height: (photo.thumbnailHeight || photo.height) ? `${photo.thumbnailHeight || photo.height}px` : 'auto',
-                                        }}
-                                        draggable={false}
-                                    />
-                                </div>
-
-                                {/* 日期水印 */}
-                                {renderWatermark()}
-
-                                {/* 出血线警告遮罩 - 四周斜线区域 */}
-                                <div className="absolute inset-0 pointer-events-none">
-                                    {/* 上边出血区域 */}
-                                    <div 
-                                        className="absolute top-0 left-0 right-0"
-                                        style={{
-                                            height: `${BLEED_AREA_PERCENT}%`,
-                                            background: `repeating-linear-gradient(
-                                                -45deg,
-                                                transparent,
-                                                transparent 3px,
-                                                rgba(239, 68, 68, 0.4) 3px,
-                                                rgba(239, 68, 68, 0.4) 6px
-                                            )`,
-                                        }}
-                                    />
-                                    {/* 下边出血区域 */}
-                                    <div 
-                                        className="absolute bottom-0 left-0 right-0"
-                                        style={{
-                                            height: `${BLEED_AREA_PERCENT}%`,
-                                            background: `repeating-linear-gradient(
-                                                -45deg,
-                                                transparent,
-                                                transparent 3px,
-                                                rgba(239, 68, 68, 0.4) 3px,
-                                                rgba(239, 68, 68, 0.4) 6px
-                                            )`,
-                                        }}
-                                    />
-                                    {/* 左边出血区域 */}
-                                    <div 
-                                        className="absolute left-0"
-                                        style={{
-                                            top: `${BLEED_AREA_PERCENT}%`,
-                                            bottom: `${BLEED_AREA_PERCENT}%`,
-                                            width: `${BLEED_AREA_PERCENT}%`,
-                                            background: `repeating-linear-gradient(
-                                                -45deg,
-                                                transparent,
-                                                transparent 3px,
-                                                rgba(239, 68, 68, 0.4) 3px,
-                                                rgba(239, 68, 68, 0.4) 6px
-                                            )`,
-                                        }}
-                                    />
-                                    {/* 右边出血区域 */}
-                                    <div 
-                                        className="absolute right-0"
-                                        style={{
-                                            top: `${BLEED_AREA_PERCENT}%`,
-                                            bottom: `${BLEED_AREA_PERCENT}%`,
-                                            width: `${BLEED_AREA_PERCENT}%`,
-                                            background: `repeating-linear-gradient(
-                                                -45deg,
-                                                transparent,
-                                                transparent 3px,
-                                                rgba(239, 68, 68, 0.4) 3px,
-                                                rgba(239, 68, 68, 0.4) 6px
-                                            )`,
-                                        }}
-                                    />
-                                    {/* 安全区域内边框线 */}
-                                    <div 
-                                        className="absolute border border-dashed border-red-400"
-                                        style={{
-                                            top: `${BLEED_AREA_PERCENT}%`,
-                                            left: `${BLEED_AREA_PERCENT}%`,
-                                            right: `${BLEED_AREA_PERCENT}%`,
-                                            bottom: `${BLEED_AREA_PERCENT}%`,
-                                        }}
-                                    />
-                                </div>
-                            </div>
-                        )}
+                                />
+                            )}
+                            
+                            {/* 水印叠加层 */}
+                            {renderWatermark()}
+                        </div>
                     </div>
 
                     {/* 图片序号和翻页按钮 */}
@@ -805,7 +736,7 @@ export function PhotoEditor({
                         <button 
                             className={`p-2 rounded-full transition-colors ${
                                 currentIndex > 0 
-                                    ? 'text-gray-600 hover:bg-gray-200 active:bg-gray-300' 
+                                    ? 'text-gray-600 hover:bg-gray-200' 
                                     : 'text-gray-300 cursor-not-allowed'
                             }`}
                             onClick={() => handleNavigate('prev')}
@@ -821,7 +752,7 @@ export function PhotoEditor({
                         <button 
                             className={`p-2 rounded-full transition-colors ${
                                 currentIndex < photos.length - 1 
-                                    ? 'text-gray-600 hover:bg-gray-200 active:bg-gray-300' 
+                                    ? 'text-gray-600 hover:bg-gray-200' 
                                     : 'text-gray-300 cursor-not-allowed'
                             }`}
                             onClick={() => handleNavigate('next')}
@@ -838,7 +769,6 @@ export function PhotoEditor({
             {/* 底部工具栏 */}
             <div className="bg-white border-t py-4 px-4 safe-area-bottom">
                 <div className="flex items-center justify-around max-w-lg mx-auto">
-                    {/* 边框样式 */}
                     <button className="flex flex-col items-center gap-1 text-gray-400">
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <rect x="3" y="3" width="18" height="18" strokeWidth={2} rx="2" />
@@ -846,7 +776,6 @@ export function PhotoEditor({
                         <span className="text-xs">边框样式</span>
                     </button>
 
-                    {/* 换图 */}
                     <button 
                         className="flex flex-col items-center gap-1 text-gray-600 hover:text-orange-500 transition-colors"
                         onClick={handleReplaceClick}
@@ -857,7 +786,6 @@ export function PhotoEditor({
                         <span className="text-xs">换图</span>
                     </button>
 
-                    {/* 裁剪 */}
                     <button className="flex flex-col items-center gap-1 text-gray-400">
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
@@ -865,7 +793,6 @@ export function PhotoEditor({
                         <span className="text-xs">裁剪</span>
                     </button>
 
-                    {/* 旋转 */}
                     <button 
                         className="flex flex-col items-center gap-1 text-gray-600 hover:text-orange-500 transition-colors"
                         onClick={handleRotate}
@@ -876,7 +803,6 @@ export function PhotoEditor({
                         <span className="text-xs">旋转</span>
                     </button>
 
-                    {/* 重置 */}
                     <button 
                         className="flex flex-col items-center gap-1 text-gray-600 hover:text-orange-500 transition-colors"
                         onClick={handleReset}

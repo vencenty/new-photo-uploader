@@ -16,6 +16,7 @@ import {
 import { PhotoEditor } from './components/PhotoEditor';
 import { SizeSelector } from './components/SizeSelector';
 import { PhotoCard } from './components/PhotoCard';
+import { VirtualPhotoGrid } from './components/VirtualPhotoGrid';
 import { getPhotoWarning } from './utils/photoValidation';
 import { readExifDate } from './utils/exifReader';
 import { mockSubmitOrder, downloadAllPhotos } from './utils/photoSubmit';
@@ -510,7 +511,7 @@ export default function PhotoPrintPage() {
                 className="hidden"
             />
 
-            <div className="min-h-screen flex flex-col">
+            <div className="h-screen flex flex-col overflow-hidden">
                 {/* 顶部导航栏 */}
                 <header className="bg-white border-b sticky top-0 z-10">
                     <div className="flex items-center justify-between px-4 py-3">
@@ -735,88 +736,22 @@ export default function PhotoPrintPage() {
                     </div>
                 </div>
 
-                {/* 照片列表区域 */}
-                <div className="flex-1 px-4 py-4 bg-gray-50">
-                    <div className="space-y-4">
-                        {Array.from({ length: Math.ceil((photos.length + 1) / 3) }).map(
-                            (_, rowIndex) => {
-                                const items = [];
-
-                                // 第一行第一个位置：添加按钮
-                                if (rowIndex === 0) {
-                                    items.push(
-                                        <div key="add-button" className="flex-1 relative">
-                            <button
-                                onClick={() => !isUploadSubmitting && handleAddPhoto()}
-                                disabled={isUploadSubmitting}
-                                                className={`absolute inset-0 bg-white border-2 border-dashed flex flex-col items-center justify-center transition-colors ${
-                                                    isUploadSubmitting
-                                                        ? 'border-gray-200 cursor-not-allowed opacity-60'
-                                                        : 'border-gray-300 hover:border-orange-500'
-                                                }`}
-                            >
-                                <div className="text-4xl text-gray-300 mb-2">+</div>
-                                <div className="text-sm text-gray-400">添加照片</div>
-                            </button>
-                            <div style={getPhotoContainerStyle()}></div>
-                        </div>
-                                    );
-                                }
-
-                                // 计算当前行应该显示的照片
-                                const startIndex = rowIndex === 0 ? 0 : rowIndex * 3 - 1;
-                                const photosInRow = rowIndex === 0 ? 2 : 3;
-                                const rowPhotos = photos.slice(startIndex, startIndex + photosInRow);
-
-                                // 添加照片项
-                                rowPhotos.forEach((photo) => {
-                                    items.push(
-                                        <PhotoCard
-                                            key={photo.id}
-                                            photo={photo}
-                                            containerStyle={getPhotoContainerStyle()}
-                                            aspectRatio={currentAspectRatio}
-                                            styleType={selectedStyle}
-                                            watermarkConfig={watermarkConfig}
-                                            isConfirmed={confirmedPhotos.has(photo.id)}
-                                            warningMessage={getPhotoWarning(photo)}
-                                            onRemove={() => handleRemovePhoto(photo.id)}
-                                            onQuantityChange={(delta) =>
-                                                handleQuantityChange(photo.id, delta)
-                                            }
-                                            onConfirm={() => !isUploadSubmitting && handleConfirmPhoto(photo.id)}
-                                            onEdit={() => {
-                                                if (!isUploadSubmitting) {
-                                                    const index = photos.findIndex(p => p.id === photo.id);
-                                                    if (index !== -1) {
-                                                        setEditingPhotoIndex(index);
-                                                    }
-                                                }
-                                            }}
-                                            disabled={isUploadSubmitting}
-                                        />
-                                    );
-                                });
-
-                                // 填充空白项以保持对齐
-                                while (items.length < 3) {
-                                    items.push(
-                                        <div
-                                            key={`placeholder-${rowIndex}-${items.length}`}
-                                            className="flex-1"
-                                        ></div>
-                                    );
-                                }
-
-                                return (
-                                    <div key={`row-${rowIndex}`} className="flex gap-3">
-                                        {items}
-                                    </div>
-                                );
-                            }
-                        )}
-                        </div>
-                </div>
+                {/* 照片列表区域 - 使用虚拟列表优化 */}
+                <VirtualPhotoGrid
+                    photos={photos}
+                    aspectRatio={currentAspectRatio}
+                    styleType={selectedStyle}
+                    watermarkConfig={watermarkConfig}
+                    confirmedPhotos={confirmedPhotos}
+                    isUploadSubmitting={isUploadSubmitting}
+                    onAddPhoto={handleAddPhoto}
+                    onRemovePhoto={handleRemovePhoto}
+                    onQuantityChange={handleQuantityChange}
+                    onConfirmPhoto={handleConfirmPhoto}
+                    onEditPhoto={setEditingPhotoIndex}
+                    getPhotoWarning={getPhotoWarning}
+                    getPhotoContainerStyle={getPhotoContainerStyle}
+                />
 
                 {/* 底部结算区域 */}
                 <div className="bg-white border-t px-4 py-3 sticky bottom-0">
